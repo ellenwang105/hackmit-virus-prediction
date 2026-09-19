@@ -1,43 +1,28 @@
+/* Dark only. The app does not follow the OS setting, so it looks the same everywhere. */
 :root {
-  --bg: #f4f6f9;
-  --surface: #ffffff;
-  --surface-2: #eef1f5;
-  --border: #dde2ea;
-  --text: #1c2430;
-  --muted: #667085;
-  --accent: #2f5fd0;
-  --truth: #0f9d9a;
-  --select: #7c3aed;
+  color-scheme: dark;
+  --bg: #12161d;
+  --surface: #1a202a;
+  --surface-2: #232b37;
+  --border: #2d3644;
+  --text: #e6eaf0;
+  --muted: #98a2b3;
+  --accent: #7ba0ff;
+  --truth: #2dd4bf;
+  --select: #a78bfa;
   --glycan: #b7a3d3;
-  --good: #1a7f4b;
-  --good-bg: #e6f5ec;
-  --warn: #9a5b00;
-  --warn-bg: #fff3dc;
-  --grid: #e3e8ef;
+  --antibody: #6f9cf0;
+  --ghost: #6b7686;
+  --good: #5fd39a;
+  --good-bg: #16302381;
+  --warn: #f2b85b;
+  --warn-bg: #3a2c10;
+  --grid: #2a3340;
   --radius: 10px;
   font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
   font-size: 14px;
   line-height: 1.45;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #12161d;
-    --surface: #1a202a;
-    --surface-2: #232b37;
-    --border: #2d3644;
-    --text: #e6eaf0;
-    --muted: #98a2b3;
-    --accent: #7ba0ff;
-    --truth: #2dd4bf;
-    --select: #a78bfa;
-    --good: #5fd39a;
-    --good-bg: #16302381;
-    --warn: #f2b85b;
-    --warn-bg: #3a2c10;
-    --grid: #2a3340;
-  }
 }
 
 * { box-sizing: border-box; }
@@ -167,4 +152,96 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 @media (max-width: 600px) {
   .app { padding: 12px 16px; }
   .trust-stats { flex-direction: column; gap: 10px; }
+}
+
+/* ---------- phylogeny picker ---------- */
+
+.phylo { margin-bottom: 14px; }
+.phylo-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.phylo-head h2 { margin-bottom: 6px; }
+.phylo-all {
+  font: inherit; font-size: 11px; line-height: 1;
+  padding: 3px 8px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+}
+.phylo-all:hover { color: var(--text); }
+.phylo-all.active { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+
+.phylo-svg { width: 100%; height: auto; display: block; }
+.phylo-branch { stroke: var(--border); stroke-width: 1.3; fill: none; }
+.phylo-dot { fill: var(--border); }
+.phylo-row { fill: var(--surface-2); opacity: 0; }
+.phylo-name { font-size: 11.5px; font-weight: 500; fill: var(--text); }
+.phylo-count { font-size: 9.5px; fill: var(--muted); }
+.phylo-tip { cursor: pointer; }
+.phylo-tip:hover .phylo-row { opacity: 1; }
+.phylo-tip:focus-visible { outline: none; }
+.phylo-tip:focus-visible .phylo-row { opacity: 1; stroke: var(--accent); stroke-width: 1.5; }
+.phylo-tip.active .phylo-row { opacity: 1; fill: color-mix(in srgb, var(--accent) 14%, transparent); }
+.phylo-tip.active .phylo-name,
+.phylo-tip.active .phylo-count { fill: var(--accent); font-weight: 600; }
+.phylo-tip.active .phylo-dot { fill: var(--accent); }
+.phylo-note {
+  margin: 8px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--muted);
+  padding-top: 8px; border-top: 1px solid var(--border);
+}
+
+/* ---------- explainer ---------- */
+
+.explain {
+  display: flex; flex-direction: column; gap: 22px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 18px;
+}
+.explain h3 { margin: 0 0 10px; font-size: 14px; }
+.explain-figures { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.explain-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+
+.figure { margin: 0; }
+.figure svg { width: 100%; height: auto; display: block; color: var(--muted); }
+.figure figcaption {
+  margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border);
+  font-size: 12.5px; line-height: 1.5; color: var(--muted);
+}
+.figure figcaption b { color: var(--text); }
+.fig-label { font-size: 9px; letter-spacing: .1em; fill: currentColor; }
+.fig-small { font-size: 10px; fill: currentColor; }
+.fig-small.accent { fill: var(--accent); }
+.fig-small.muted-text { opacity: .7; }
+
+.explain-steps { margin: 0; padding-left: 18px; display: grid; gap: 8px; font-size: 13px; color: var(--muted); }
+.explain-steps b { color: var(--text); }
+
+.explain-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.explain-table th, .explain-table td { padding: 7px 8px; border-bottom: 1px solid var(--border); text-align: right; }
+.explain-table th:first-child { text-align: left; font-weight: 500; }
+.explain-table thead th { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.explain-table tbody th { font-size: 13px; }
+.explain-table tbody td { font-size: 13px; }
+.explain-table tr.headline { background: var(--good-bg); }
+.explain-table tr.headline th, .explain-table tr.headline td { font-weight: 600; }
+.explain-table .muted { font-weight: 400; }
+.explain-foot { margin: 10px 0 0; font-size: 12px; color: var(--muted); }
+
+.caveats { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.caveats li {
+  padding-left: 12px; border-left: 2px solid var(--border);
+  font-size: 12.5px; line-height: 1.5; color: var(--muted);
+}
+.caveats b { color: var(--text); }
+
+@media (max-width: 900px) {
+  .explain-figures, .explain-cols { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Switching antigens keeps the previous one mounted, so the only cue needed is
+   a slight dimming — anything that changes layout would reintroduce the jump. */
+.main.is-switching { cursor: progress; }
+.main.is-switching .workspace,
+.main.is-switching .residue-card,
+.main.is-switching .track { opacity: 0.55; transition: opacity 120ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .main.is-switching .workspace,
+  .main.is-switching .residue-card,
+  .main.is-switching .track { transition: none; }
 }

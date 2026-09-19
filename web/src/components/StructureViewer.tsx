@@ -4,6 +4,7 @@ import type { Antigen } from "../types";
 import { loadStructure } from "../data";
 import {
   GHOST_COLOR,
+  ANTIBODY_COLOR,
   GLYCAN_COLOR,
   LEGEND_TICKS,
   SELECT_COLOR,
@@ -14,8 +15,12 @@ import {
 } from "../color";
 
 export interface ViewerOptions {
+  /** filled circles on the residues the model scores highest */
+  showSites: boolean;
   showTruth: boolean;
   showAntibodies: boolean;
+  /** the other protomers of the same trimer, which are HA too, not antibody */
+  showOtherCopies: boolean;
   showGlycans: boolean;
   showSurface: boolean;
 }
@@ -45,6 +50,68 @@ interface Loaded {
 }
 
 const GLYCAN_RESN = ["NAG", "NDG", "BMA", "MAN", "FUC", "GAL", "SIA", "GLC", "XYS"];
+
+/**
+ * Camera rotation that stands the spike upright with its head at the top.
+ *
+ * HA is a long thin molecule, and 3Dmol's default camera lands wherever the
+ * deposited coordinate frame happens to point — often straight down the long
+ * axis, where the structure reads as a shapeless blob. Taking the dominant axis
+ * of the alpha carbons and rotating it onto the screen's vertical gives the
+ * silhouette everyone recognises, with the drifting head above the stem.
+ *
+ * Returned as a quaternion in 3Dmol's (x, y, z, w) order, ready for setView.
+ */
+function uprightQuaternion(ca: Float32Array, region: string[]): [number, number, number, number] | null {
+  const points: number[][] = [];
+  const isHead: boolean[] = [];
+  for (let i = 0; i < region.length; i++) {
+    const x = ca[3 * i];
+    if (Number.isNaN(x)) continue;
+    points.push([x, ca[3 * i + 1], ca[3 * i + 2]]);
+    isHead.push(region[i] === "head");
+  }
+  if (points.length < 20) return null;
+
+  const centre = [0, 1, 2].map((k) => points.reduce((s, p) => s + p[k], 0) / points.length);
+  const centred = points.map((p) => [p[0] - centre[0], p[1] - centre[1], p[2] - centre[2]]);
+
+  // power iteration converges on the covariance's dominant eigenvector, which
+  // is cheaper than pulling in a linear-algebra dependency for one vector
+  let axis = [0, 0, 1];
+  for (let step = 0; step < 32; step++) {
+    const next = [0, 0, 0];
+    for (const p of centred) {
+      const dot = p[0] * axis[0] + p[1] * axis[1] + p[2] * axis[2];
+      next[0] += dot * p[0];
+      next[1] += dot * p[1];
+      next[2] += dot * p[2];
+    }
+    const norm = Math.hypot(next[0], next[1], next[2]);
+    if (norm < 1e-9) return null;
+    axis = next.map((v) => v / norm);
+  }
+
+  const headPoints = centred.filter((_, i) => isHead[i]);
+  if (headPoints.length) {
+    const mean = headPoints.reduce((s, p) => s + p[0] * axis[0] + p[1] * axis[1] + p[2] * axis[2], 0) / headPoints.length;
+    if (mean < 0) axis = axis.map((v) => -v);
+  }
+
+  // shortest rotation taking the spike axis onto screen-up
+  const up = [0, 1, 0];
+  const dot = axis[0] * up[0] + axis[1] * up[1] + axis[2] * up[2];
+  if (dot > 0.9999) return [0, 0, 0, 1];
+  if (dot < -0.9999) return [0, 0, 1, 0];      // 180 degrees about z
+  const cross = [
+    axis[1] * up[2] - axis[2] * up[1],
+    axis[2] * up[0] - axis[0] * up[2],
+    axis[0] * up[1] - axis[1] * up[0],
+  ];
+  const w = 1 + dot;
+  const length = Math.hypot(cross[0], cross[1], cross[2], w);
+  return [cross[0] / length, cross[1] / length, cross[2] / length, w / length];
+}
 
 /**
  * Map 3Dmol atoms onto the antigen's residue arrays. 3Dmol keeps the PDB
@@ -102,12 +169,33 @@ function mapResidues(model: any, antigen: Antigen, allChains: string[], antigenC
   };
 }
 
+/**
+ * Predicted sites are drawn as filled circles on the alpha carbons of the
+ * top-scoring residues. The cutoff is relative to the chain, not fixed: scores
+ * are low on most chains (epitopes are ~5% of residues), and a fixed 0.5 would
+ * mark only a handful of residues on a typical held-out antigen.
+ */
+const SITE_TOP_FRACTION = 0.07;
+const SITE_MIN_SCORE = 0.1;
+/** circle radius in angstrom for scores below 0.3, 0.3-0.5 and above 0.5 */
+const SITE_RADIUS = [1.0, 1.5, 2.0] as const;
+const SITE_BREAKS = [0.3, 0.5] as const;
+/** wireframe cage around residues an antibody was actually seen touching */
+const HALO_RADIUS = 3.0;
+
+function siteCutoff(score: number[]) {
+  const sorted = [...score].sort((a, b) => b - a);
+  const rank = Math.max(1, Math.round(score.length * SITE_TOP_FRACTION));
+  return Math.max(SITE_MIN_SCORE, sorted[Math.min(rank, sorted.length) - 1] ?? 1);
+}
+
 function applyStyles(
   viewer: any,
   loaded: Loaded,
   antigen: Antigen,
   options: ViewerOptions,
   selected: number[],
+  halos: { current: any[] },
 ) {
   const own = { chain: antigen.chain, hetflag: false };
   const indexOf = (atom: any) => loaded.atomIndex.get(atom.serial) ?? -1;
@@ -119,21 +207,67 @@ function applyStyles(
   viewer.setStyle({}, {});
   viewer.removeAllSurfaces();
 
-  if (options.showAntibodies && loaded.antibodyChains.length) {
-    viewer.setStyle({ chain: loaded.antibodyChains, hetflag: false }, {
-      cartoon: { color: "#8a94a6", opacity: 0.35 },
+  // Three roles, told apart by hue as well as weight. The other HA protomers
+  // used to share a grey with the antibody, so the big pale mass in a trimer
+  // read as "the antibody" and the Antibodies checkbox appeared to do nothing.
+  if (options.showOtherCopies && loaded.otherAntigenChains.length) {
+    viewer.setStyle({ chain: loaded.otherAntigenChains, hetflag: false }, {
+      cartoon: { color: GHOST_COLOR, opacity: 0.3 },
     });
   }
-  if (loaded.otherAntigenChains.length) {
-    viewer.setStyle({ chain: loaded.otherAntigenChains, hetflag: false }, {
-      cartoon: { color: GHOST_COLOR, opacity: 0.6 },
+  if (options.showAntibodies && loaded.antibodyChains.length) {
+    viewer.setStyle({ chain: loaded.antibodyChains, hetflag: false }, {
+      cartoon: { color: ANTIBODY_COLOR, opacity: 0.85 },
     });
   }
   viewer.setStyle(own, { cartoon: { colorfunc: colourOf } });
 
+  if (options.showSites) {
+    const cutoff = siteCutoff(antigen.score);
+    const size = (i: number) => (antigen.score[i] >= SITE_BREAKS[1] ? 2 : antigen.score[i] >= SITE_BREAKS[0] ? 1 : 0);
+    // radius is a constant per style, so one style per size bucket
+    for (let bucket = 0; bucket < SITE_RADIUS.length; bucket++) {
+      viewer.addStyle(
+        {
+          ...own,
+          atom: "CA",
+          predicate: (a: any) => {
+            const i = indexOf(a);
+            return i >= 0 && antigen.score[i] >= cutoff && size(i) === bucket;
+          },
+        },
+        { sphere: { radius: SITE_RADIUS[bucket], colorfunc: colourOf } },
+      );
+    }
+  }
+
   if (options.showGlycans) {
     viewer.setStyle({ hetflag: true, resn: GLYCAN_RESN }, {
       stick: { radius: 0.14, color: hex(GLYCAN_COLOR) },
+    });
+  }
+  // A cage on every observed contact, whether or not the model marked it, so a
+  // cage around a filled circle is a hit and a bare cage is a miss.
+  //
+  // Two constraints shaped this. They are shapes rather than atom styles
+  // because 3Dmol keeps one sphere style per atom and merges later ones into
+  // it, so a halo added as a style would replace the predicted-site circle
+  // instead of surrounding it. And they are wireframes rather than translucent
+  // shells because alpha shapes did not render here at all, while an opaque one
+  // buries the circle it is meant to highlight.
+  halos.current.forEach((shape) => viewer.removeShape(shape));
+  halos.current = [];
+  if (options.showTruth) {
+    antigen.epitope.forEach((observed, i) => {
+      if (!observed || Number.isNaN(loaded.ca[3 * i])) return;
+      halos.current.push(
+        viewer.addSphere({
+          center: { x: loaded.ca[3 * i], y: loaded.ca[3 * i + 1], z: loaded.ca[3 * i + 2] },
+          radius: HALO_RADIUS,
+          color: hex(TRUTH_COLOR),
+          wireframe: true,
+        }),
+      );
     });
   }
   if (options.showTruth) {
@@ -142,6 +276,7 @@ function applyStyles(
       { ...own, predicate: (a: any) => truth.has(indexOf(a)) },
       { stick: { radius: 0.15, color: hex(TRUTH_COLOR) } },
     );
+
   }
   if (selected.length) {
     const chosen = new Set(selected);
@@ -156,12 +291,32 @@ function applyStyles(
   viewer.render();
 }
 
+/** Breathing room so the whole model clears the frame instead of touching it. */
+const FIT_MARGIN = 1.06;
+
+/**
+ * Stop the camera backing out past the point where the whole file is in view.
+ *
+ * `fit` is the camera distance at which 3Dmol frames everything. It sizes a
+ * bounding sphere against the vertical field of view, so a canvas taller than
+ * it is wide needs proportionally more distance to fit horizontally too.
+ */
+function limitZoomOut(viewer: any, node: HTMLElement, fit: number | null) {
+  if (fit === null) return;
+  const aspect = node.clientWidth / Math.max(1, node.clientHeight);
+  viewer.setZoomLimits(0, fit * FIT_MARGIN * Math.max(1, 1 / aspect));
+}
+
 export function StructureViewer(props: Props) {
   const { antigen, antigenChains, options, selected, hovered, focus } = props;
   const container = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<any>(null);
   const loadedRef = useRef<Loaded | null>(null);
   const markerRef = useRef<any>(null);
+  /** observed-contact shells currently in the scene, so a restyle can remove them */
+  const haloRef = useRef<any[]>([]);
+  /** camera distance at which the whole file fits; null until a structure loads */
+  const fitRef = useRef<number | null>(null);
   const handlers = useRef(props);
   handlers.current = props;
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -172,7 +327,10 @@ export function StructureViewer(props: Props) {
     const node = container.current!;
     const viewer = $3Dmol.createViewer(node, { backgroundAlpha: 0 });
     viewerRef.current = viewer;
-    const observer = new ResizeObserver(() => viewer.resize());
+    const observer = new ResizeObserver(() => {
+      viewer.resize();
+      limitZoomOut(viewer, node, fitRef.current);
+    });
     observer.observe(node);
     return () => {
       observer.disconnect();
@@ -196,6 +354,7 @@ export function StructureViewer(props: Props) {
         viewer.removeAllModels();
         viewer.removeAllShapes();
         markerRef.current = null;
+        haloRef.current = [];
         const model = viewer.addModel(text, "cif");
         const allChains = [...new Set<string>(model.selectedAtoms({}).map((a: any) => a.chain))];
         const loaded = mapResidues(model, antigen, allChains, antigenChains);
@@ -217,9 +376,24 @@ export function StructureViewer(props: Props) {
           if (i !== undefined) handlers.current.onClick(i, event.shiftKey || event.ctrlKey || event.metaKey);
         });
 
-        applyStyles(viewer, loaded, antigen, handlers.current.options, handlers.current.selected);
+        applyStyles(viewer, loaded, antigen, handlers.current.options, handlers.current.selected, haloRef);
+        // The viewer outlives any one structure, and 3Dmol clamps every zoomTo
+        // against the current limit, so the previous structure's limit has to
+        // go before this one is measured or a larger structure would be cut off.
+        viewer.setZoomLimits(0, Infinity);
+        viewer.zoomTo({});
+        fitRef.current = viewer.getPerceivedDistance();
+        limitZoomOut(viewer, container.current!, fitRef.current);
+
         viewer.zoomTo(own);
         viewer.zoom(1.3, 0);
+
+        // keep zoomTo's centre and distance, replace only the orientation
+        const upright = uprightQuaternion(loaded.ca, antigen.region);
+        if (upright) {
+          const view = viewer.getView();
+          viewer.setView([view[0], view[1], view[2], view[3], ...upright]);
+        }
         viewer.render();
         handlers.current.onCoords(loaded.ca);
         setStatus("ready");
@@ -238,7 +412,7 @@ export function StructureViewer(props: Props) {
   useEffect(() => {
     const viewer = viewerRef.current;
     const loaded = loadedRef.current;
-    if (status === "ready" && viewer && loaded) applyStyles(viewer, loaded, antigen, options, selected);
+    if (status === "ready" && viewer && loaded) applyStyles(viewer, loaded, antigen, options, selected, haloRef);
   }, [status, antigen, options, selected]);
 
   // hover marker: a translucent sphere is far cheaper than restyling the cartoon
@@ -280,9 +454,11 @@ export function StructureViewer(props: Props) {
       <div className="viewer-toolbar">
         {(
           [
+            ["showSites", "Predicted sites"],
             ["showTruth", "Observed epitope"],
             ["showSurface", "Surface"],
-            ["showAntibodies", "Antibodies"],
+            ["showAntibodies", "Antibody"],
+            ["showOtherCopies", "Other HA copies"],
             ["showGlycans", "Glycans"],
           ] as const
         ).map(([key, label]) => (

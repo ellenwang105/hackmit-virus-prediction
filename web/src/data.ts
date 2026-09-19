@@ -1,4 +1,4 @@
-import type { Antigen, AntigenSummary, MetricRow } from "./types";
+import type { Antigen, AntigenSummary, MetricRow, Phylogeny } from "./types";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -10,6 +10,7 @@ async function getJson<T>(path: string): Promise<T> {
 
 export const loadIndex = () => getJson<AntigenSummary[]>("data/index.json");
 export const loadMetrics = () => getJson<MetricRow[]>("data/metrics.json");
+export const loadPhylogeny = () => getJson<Phylogeny>("data/phylogeny.json");
 
 const antigenCache = new Map<string, Promise<Antigen>>();
 export function loadAntigen(id: string): Promise<Antigen> {

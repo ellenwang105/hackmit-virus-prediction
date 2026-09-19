@@ -62,3 +62,28 @@ export interface MetricRow {
   residues: number;
   positive_rate: number;
 }
+
+/** data/phylogeny.json: subtypes arranged by pairwise sequence identity. */
+export interface PhyloNode {
+  /** subtype name at a tip; empty at an internal node */
+  name: string;
+  /** 1 - mean identity to the other side of the split */
+  height: number;
+  children: PhyloNode[];
+}
+
+export interface SubtypeMeta {
+  representative: string;
+  chains: number;
+  structures: number;
+  residues: number;
+  heldOut: boolean;
+  split: string;
+  group: "group1" | "group2" | "B";
+}
+
+export interface Phylogeny {
+  tree: PhyloNode;
+  subtypes: Record<string, SubtypeMeta>;
+  identity: { names: string[]; matrix: number[][] };
+}

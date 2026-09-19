@@ -32,10 +32,12 @@ export const legendGradient = () =>
     .map((t) => `${ramp(t)} ${t * 100}%`)
     .join(", ")})`;
 
-export const TRUTH_COLOR = "#0f9d9a";
+export const TRUTH_COLOR = "#2dd4bf";
 export const SELECT_COLOR = "#7c3aed";
 export const GHOST_COLOR = "#aab3c0";
 export const GLYCAN_COLOR = "#b7a3d3";
+/** Fab chains: a saturated blue that no point on the score ramp can be mistaken for. */
+export const ANTIBODY_COLOR = "#4f7fd6";
 export const hex = (css: string) => parseInt(css.slice(1), 16);
 
 export const SITE_COLOR: Record<string, string> = {
