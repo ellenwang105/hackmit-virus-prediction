@@ -47,44 +47,70 @@ FUSION_PEPTIDE = set(range(1, 24))
 LONG_HELIX = set(range(76, 131))
 
 
-def classify_chain(residue_numbers):
-    """Label a chain HA1, HA2 or HA0 from the residue numbers it contains.
+# a residue outside these ranges cannot be placed on the standard frame, so it
+# is left unannotated rather than given a fabricated number
+HA1_FRAME = (1, HA1_LENGTH)
+HA2_FRAME = (1, 190)
 
-    HA2 chains are short and never number past ~185. Continuous HA0 chains run
-    well past the end of HA1.
+# depositors number HA2 either straight on from HA1 or at a +1000 offset
+HA2_OFFSET = 1000
+
+
+def numbering_scheme(residue_numbers):
+    """How a chain numbers its two pieces.
+
+    Four conventions appear in the PDB, and telling them apart matters: reading
+    an offset chain as a continuous one turns HA2 residue 1005 into "HA1 677",
+    which then collects meaningless region and antigenic-site labels.
     """
-    highest = max(residue_numbers)
+    numbers = sorted(set(residue_numbers))
+    highest = numbers[-1]
+    if highest >= HA2_OFFSET:
+        return "offset"        # HA1 numbered normally, HA2 at +1000
     if highest > HA1_LENGTH + 40:
-        return "HA0"
-    if highest <= 190 and len(residue_numbers) < 220:
-        return "HA2"
-    return "HA1"
+        return "continuous"    # HA0 numbered straight through
+    if highest <= HA2_FRAME[1] and len(numbers) < 220:
+        return "HA2"           # the stalk piece alone
+    return "HA1"               # the head piece alone
 
 
-def to_ha_numbering(residue_number, chain_type):
-    """Map a residue onto (piece, number-within-that-piece).
-
-    HA0 chains number HA1 and HA2 in one run, so anything past HA1 is shifted
-    back to HA2's own numbering.
-    """
-    if chain_type == "HA2":
-        return "HA2", residue_number
-    if chain_type == "HA1":
-        return "HA1", residue_number
-    if residue_number <= HA1_LENGTH:
-        return "HA1", residue_number
-    return "HA2", residue_number - HA1_LENGTH
+def classify_chain(residue_numbers):
+    """Label a chain HA1, HA2 or HA0. Both two-piece conventions are HA0."""
+    scheme = numbering_scheme(residue_numbers)
+    return "HA0" if scheme in ("offset", "continuous") else scheme
 
 
-def region_of(piece, number):
+def to_ha_numbering(residue_number, scheme):
+    """Map a residue onto (piece, number-within-that-piece, is-on-the-frame)."""
+    if scheme == "HA2":
+        piece, number = "HA2", residue_number
+    elif scheme == "HA1":
+        piece, number = "HA1", residue_number
+    elif scheme == "offset":
+        if residue_number >= HA2_OFFSET:
+            piece, number = "HA2", residue_number - HA2_OFFSET
+        else:
+            piece, number = "HA1", residue_number
+    elif residue_number <= HA1_LENGTH:
+        piece, number = "HA1", residue_number
+    else:
+        piece, number = "HA2", residue_number - HA1_LENGTH
+
+    frame = HA1_FRAME if piece == "HA1" else HA2_FRAME
+    return piece, number, frame[0] <= number <= frame[1]
+
+
+def region_of(piece, number, in_frame):
     """head or stem. HA1 outside the head domain folds back into the stalk."""
+    if not in_frame:
+        return ""
     if piece == "HA2":
         return "stem"
     return "head" if HEAD_RANGE[0] <= number <= HEAD_RANGE[1] else "stem"
 
 
-def antigenic_site_of(piece, number):
-    if piece != "HA1":
+def antigenic_site_of(piece, number, in_frame):
+    if piece != "HA1" or not in_frame:
         return ""
     for name, residues in ANTIGENIC_SITES.items():
         if number in residues:
@@ -95,21 +121,25 @@ def antigenic_site_of(piece, number):
 def annotate(frame, chain_column="antigen_id", residue_column="residue_number"):
     """Add piece / region / antigenic_site / is_rbs columns to a residue table."""
     frame = frame.copy()
-    chain_types = frame.groupby(chain_column)[residue_column].apply(
-        lambda s: classify_chain(s.tolist())
+    schemes = frame.groupby(chain_column)[residue_column].apply(
+        lambda s: numbering_scheme(s.tolist())
     )
-    frame["chain_type"] = frame[chain_column].map(chain_types)
+    frame["chain_type"] = frame[chain_column].map(
+        schemes.map(lambda s: "HA0" if s in ("offset", "continuous") else s)
+    )
 
-    mapped = [to_ha_numbering(n, t)
-              for n, t in zip(frame[residue_column], frame["chain_type"])]
-    frame["piece"] = [p for p, _ in mapped]
-    frame["ha_number"] = [n for _, n in mapped]
-    frame["region"] = [region_of(p, n) for p, n in mapped]
-    frame["antigenic_site"] = [antigenic_site_of(p, n) for p, n in mapped]
+    mapped = [to_ha_numbering(n, s)
+              for n, s in zip(frame[residue_column], frame[chain_column].map(schemes))]
+    frame["piece"] = [p for p, _, _ in mapped]
+    frame["ha_number"] = [n for _, n, _ in mapped]
+    frame["on_frame"] = [f for _, _, f in mapped]
+    frame["region"] = [region_of(p, n, f) for p, n, f in mapped]
+    frame["antigenic_site"] = [antigenic_site_of(p, n, f) for p, n, f in mapped]
     frame["is_rbs"] = [
-        p == "HA1" and n in RECEPTOR_BINDING_SITE for p, n in mapped
+        f and p == "HA1" and n in RECEPTOR_BINDING_SITE for p, n, f in mapped
     ]
     frame["is_fusion_machinery"] = [
-        p == "HA2" and (n in FUSION_PEPTIDE or n in LONG_HELIX) for p, n in mapped
+        f and p == "HA2" and (n in FUSION_PEPTIDE or n in LONG_HELIX)
+        for p, n, f in mapped
     ]
     return frame
