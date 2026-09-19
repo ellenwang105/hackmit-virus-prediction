@@ -11,6 +11,8 @@ import { RegionSummary } from "./components/RegionSummary";
 import { DurabilityPlot } from "./components/DurabilityPlot";
 import { TrustBar } from "./components/TrustBar";
 import { Mechanism } from "./components/Mechanism";
+import { SequenceSearch } from "./components/SequenceSearch";
+import type { SearchResult, SequenceHit } from "./search";
 
 type Tab = "hotspots" | "regions" | "durability";
 const TABS: [Tab, string][] = [
@@ -48,6 +50,9 @@ export function App() {
   const [focus, setFocus] = useState<{ indices: number[]; nonce: number } | null>(null);
   const [ca, setCa] = useState<Float32Array | null>(null);
   const [tab, setTab] = useState<Tab>("hotspots");
+  const [searchOpen, setSearchOpen] = useState(false);
+  // the most recent sequence search, kept so its matches stay one click away from the structure
+  const [lastSearch, setLastSearch] = useState<SearchResult | null>(null);
 
   useEffect(() => {
     loadPhylogeny().then(setPhylogeny).catch(() => setPhylogeny(null));
@@ -91,6 +96,8 @@ export function App() {
   const current = antigen;
   const pending = Boolean(selectedId) && antigen?.id !== selectedId;
   const summary = index?.find((a) => a.id === (current?.id ?? selectedId)) ?? null;
+  // set while the open structure is one of the last search's matches
+  const matched = lastSearch?.hits.find((h) => h.chains.includes(selectedId)) ?? null;
 
   // stable identity: the viewer reloads its structure whenever this changes
   const antigenChains = useMemo(
@@ -112,6 +119,13 @@ export function App() {
       return indices;
     });
   }, []);
+
+  const pickMatch = useCallback((hit: SequenceHit, result: SearchResult) => {
+    setLastSearch(result);
+    setSelectedId(hit.id);
+    setSearchOpen(false);
+  }, []);
+  const closeSearch = useCallback(() => setSearchOpen(false), []);
 
   const pickPatch = useCallback((indices: number[]) => {
     setSelected(indices);
@@ -137,14 +151,31 @@ export function App() {
           <h1>Epitope Explorer</h1>
           <p className="muted">Where on influenza hemagglutinin antibodies are likely to bind</p>
         </div>
-        <div className="key">
-          <span><i className="key-swatch" style={{ background: "var(--antibody)" }} /> antibody</span>
-          <span><i className="key-swatch" style={{ background: "var(--ghost)" }} /> other HA copies</span>
-          <span><i className="key-swatch" style={{ background: "var(--truth)" }} /> observed epitope</span>
-          <span><i className="key-swatch" style={{ background: "var(--select)" }} /> selected</span>
-          <span><i className="key-swatch" style={{ background: "var(--glycan)" }} /> glycan</span>
+        <div className="header-right">
+          <button className="primary-button" onClick={() => setSearchOpen(true)} disabled={!index}>
+            Find by sequence
+          </button>
+          <div className="key">
+            <span><i className="key-swatch" style={{ background: "var(--antibody)" }} /> antibody</span>
+            <span><i className="key-swatch" style={{ background: "var(--ghost)" }} /> other HA copies</span>
+            <span><i className="key-swatch" style={{ background: "var(--truth)" }} /> observed epitope</span>
+            <span><i className="key-swatch" style={{ background: "var(--select)" }} /> selected</span>
+            <span><i className="key-swatch" style={{ background: "var(--glycan)" }} /> glycan</span>
+          </div>
         </div>
       </header>
+
+      {index && (
+        <SequenceSearch
+          open={searchOpen}
+          onClose={closeSearch}
+          index={index}
+          selectedId={selectedId}
+          exampleId={DEFAULT_ID}
+          onPick={pickMatch}
+          onResult={setLastSearch}
+        />
+      )}
 
       <div className="layout">
         {index ? (
@@ -154,6 +185,25 @@ export function App() {
         )}
 
         <main className={pending ? "main is-switching" : "main"} aria-busy={pending}>
+          {matched && lastSearch && (
+            <div className="match-banner" role="status">
+              <span>
+                <strong>Match for your sequence</strong>
+                {matched.matches} of your {lastSearch.query.sequence.length} residues identical (
+                {(matched.match * 100).toFixed(matched.match === 1 ? 0 : 1)}%). Scores describe this structure, not
+                your sequence.
+              </span>
+              <span className="banner-actions">
+                <button className="ghost-button" onClick={() => setSearchOpen(true)}>
+                  Other matches
+                </button>
+                <button className="ghost-button" onClick={() => setLastSearch(null)}>
+                  Dismiss
+                </button>
+              </span>
+            </div>
+          )}
+
           {summary && <TrustBar antigen={summary} metrics={metrics} />}
 
           {current ? (
