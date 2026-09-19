@@ -1,7 +1,7 @@
 split,scorer,auprc,precision@20,mcc,chains,residues,positive_rate
-val,epitope_score,0.4221,0.2931,0.3209,109.0,33990.0,0.0529
+val,epitope_score,0.4329,0.2936,0.3118,109.0,33990.0,0.0529
 val,rel_sasa_assembly,0.1157,0.1124,0.1299,109.0,33990.0,0.0529
-test_group2,epitope_score,0.3734,0.3107,0.1972,234.0,68297.0,0.0516
+test_group2,epitope_score,0.384,0.3143,0.1859,234.0,68297.0,0.0516
 test_group2,rel_sasa_assembly,0.1315,0.109,0.12,234.0,68297.0,0.0516
-test_B,epitope_score,0.1488,0.1171,0.1252,38.0,10987.0,0.0695
+test_B,epitope_score,0.1711,0.1408,0.1175,38.0,10987.0,0.0695
 test_B,rel_sasa_assembly,0.1461,0.1539,0.1325,38.0,10987.0,0.0695

@@ -12,6 +12,7 @@ import pandas as pd
 from xgboost import XGBClassifier
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from epitope import ESM_COMPONENTS  # noqa: E402
 from epitope.annotations import annotate  # noqa: E402
 from epitope.metrics import best_threshold, comparison_table  # noqa: E402
 
@@ -65,12 +66,18 @@ for amino_acid in AMINO_ACIDS:
 onehot = onehot[[f"aa_{a}" for a in AMINO_ACIDS]].astype(float)
 data = pd.concat([data, onehot], axis=1)
 
-esm_columns = [c for c in esm.columns if c.startswith("esm_")]
+# the same leading components scripts/03 trained on, in the same order
+esm_columns = sorted([c for c in esm.columns if c.startswith("esm_")],
+                     key=lambda c: int(c.split("_")[1]))[:ESM_COMPONENTS]
 data[esm_columns] = data[esm_columns].fillna(0.0)
 feature_columns = STRUCTURAL + list(onehot.columns) + esm_columns
 
 model = XGBClassifier()
 model.load_model(MODEL_PATH)
+if model.n_features_in_ != len(feature_columns):
+    raise SystemExit(
+        f"{MODEL_PATH} expects {model.n_features_in_} features but this builds "
+        f"{len(feature_columns)} — retrain with scripts/03_train_xgb.py")
 data["epitope_score"] = model.predict_proba(data[feature_columns])[:, 1].round(5)
 
 data = annotate(data)

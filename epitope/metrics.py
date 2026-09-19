@@ -61,11 +61,12 @@ def evaluate(frame, threshold, score_column="score", label_column="is_epitope"):
     }
 
 
-def comparison_table(frame, score_columns, threshold_frame=None):
+def comparison_table(frame, score_columns, threshold_frame=None,
+                     label_column="is_epitope"):
     """Evaluate several score columns side by side, e.g. model against baselines."""
     reference = threshold_frame if threshold_frame is not None else frame
     rows = {}
     for column in score_columns:
-        threshold, _ = best_threshold(reference, column)
-        rows[column] = evaluate(frame, threshold, column)
+        threshold, _ = best_threshold(reference, column, label_column)
+        rows[column] = evaluate(frame, threshold, column, label_column)
     return pd.DataFrame(rows).T

@@ -22,7 +22,10 @@ OUTPUT_PATH = pathlib.Path("data/esm_v1.parquet")
 
 MODEL_NAME = "esm2_t33_650M_UR50D"
 REPRESENTATION_LAYER = 33
-COMPONENTS = 64
+# Fitted once at the widest setting. PCA components are ordered and nested, so
+# scripts/03 can take the leading N of these without refitting, and re-running
+# the (slow) ESM pass to try a different width is unnecessary.
+COMPONENTS = 256
 BATCH_TOKENS = 8000
 
 KEY = ["PDB", "antigen_chain", "residue_number", "insertion_code"]
@@ -108,8 +111,11 @@ train_mask = stacked["split_group"] == "train"
 pca = PCA(n_components=COMPONENTS, random_state=0)
 pca.fit(stacked.loc[train_mask, raw_columns].to_numpy(dtype=np.float32))
 reduced = pca.transform(stacked[raw_columns].to_numpy(dtype=np.float32))
-print(f"PCA fitted on {int(train_mask.sum()):,} training residues; "
-      f"{COMPONENTS} components explain {pca.explained_variance_ratio_.sum():.1%} of variance")
+cumulative = np.cumsum(pca.explained_variance_ratio_)
+print(f"PCA fitted on {int(train_mask.sum()):,} training residues")
+for width in (16, 32, 64, 128, COMPONENTS):
+    if width <= COMPONENTS:
+        print(f"  {width:>4} components explain {cumulative[width - 1]:.1%} of variance")
 
 output = stacked[KEY].copy()
 for index in range(COMPONENTS):
