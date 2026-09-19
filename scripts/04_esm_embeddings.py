@@ -19,6 +19,8 @@ import esm
 RESIDUES_PATH = "data/residues_v1.parquet"
 FASTA_PATH = "antigen_sequences.fasta"
 OUTPUT_PATH = pathlib.Path("data/esm_v1.parquet")
+# epitope/predict.py needs this to put a new sequence in the same feature space
+PCA_PATH = pathlib.Path("models/esm_pca_v1.npz")
 
 MODEL_NAME = "esm2_t33_650M_UR50D"
 REPRESENTATION_LAYER = 33
@@ -111,6 +113,18 @@ train_mask = stacked["split_group"] == "train"
 pca = PCA(n_components=COMPONENTS, random_state=0)
 pca.fit(stacked.loc[train_mask, raw_columns].to_numpy(dtype=np.float32))
 reduced = pca.transform(stacked[raw_columns].to_numpy(dtype=np.float32))
+
+# The projection is only meaningful with the exact basis the model was trained
+# on, so it is saved alongside the model rather than refitted at prediction time.
+PCA_PATH.parent.mkdir(exist_ok=True)
+np.savez(
+    PCA_PATH,
+    mean=pca.mean_.astype(np.float32),
+    components=pca.components_.astype(np.float32),
+    esm_model=MODEL_NAME,
+    layer=REPRESENTATION_LAYER,
+)
+print(f"wrote {PCA_PATH}")
 cumulative = np.cumsum(pca.explained_variance_ratio_)
 print(f"PCA fitted on {int(train_mask.sum()):,} training residues")
 for width in (16, 32, 64, 128, COMPONENTS):
