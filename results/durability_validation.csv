@@ -1,0 +1,7 @@
+check,quantity,left,left_value,right,right_value,expectation,passed,note
+1a. E premise,mean E,head,0.06017686412055079,stem,0.07259360162294773,head > stem,False,"premise, not conclusion"
+1b. D inversion,mean D,stem,0.0631362914700887,head,0.03333376728649371,stem > head,True,
+2. sites are decoys,mean C,all H3,0.82314883094788,sites A-E,0.6242455871172123,all H3 > sites A-E,True,
+3a. site B wins on E,mean E,site B,0.21907345662703653,receptor pocket,0.19989542891421716,site B > receptor pocket,True,"premise, not conclusion"
+3b. pocket wins on D,mean D,receptor pocket,0.10154645830833832,site B,0.07841978423601938,receptor pocket > site B,True,
+4. conserved base wins on D,mean D,Y98/W153/H183/Y195,0.08161573277661795,site B,0.07841978423601938,Y98/W153/H183/Y195 > site B,True,
