@@ -13,8 +13,8 @@ interface Props {
 const ROW = 26;
 const PAD_TOP = 10;
 const PAD_BOTTOM = 6;
-// wide enough for a mono subtype name beside its "165 · held out" count, which no longer fit at 92
-const LABEL_W = 138;
+// room for a mono subtype name beside its structure count
+const LABEL_W = 96;
 const LEFT = 4;
 
 function tipsOf(node: PhyloNode, out: PhyloNode[] = []) {
@@ -62,7 +62,7 @@ export function PhyloTree({ phylogeny, value, filter, onChange }: Props) {
   return (
     <div className="phylo">
       <div className="phylo-head">
-        <h2>Subtype</h2>
+        <h2>Virus type</h2>
         <button
           className={filter === "all" ? "phylo-all active" : "phylo-all"}
           onClick={() => onChange("all")}
@@ -92,7 +92,7 @@ export function PhyloTree({ phylogeny, value, filter, onChange }: Props) {
               role="button"
               tabIndex={0}
               aria-pressed={active}
-              aria-label={`${tip.name}, ${meta?.chains ?? 0} chains`}
+              aria-label={`${tip.name}, ${meta?.structures ?? 0} structures`}
               onClick={() => onChange(tip.name)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
@@ -107,8 +107,7 @@ export function PhyloTree({ phylogeny, value, filter, onChange }: Props) {
                 {tip.name}
               </text>
               <text className="phylo-count" x={222} y={y + 4} textAnchor="end">
-                {meta?.chains ?? 0}
-                {meta?.heldOut ? " · held out" : ""}
+                {meta?.structures ?? 0}
               </text>
             </g>
           );
@@ -116,8 +115,7 @@ export function PhyloTree({ phylogeny, value, filter, onChange }: Props) {
       </svg>
 
       <p className="phylo-note">
-        Trained on <b>group 1</b> subtypes only. All other subtypes are held out; accuracy decreases with
-        phylogenetic distance from the training set.
+        Branches closer together are more similar viruses. Numbers are solved structures.
       </p>
     </div>
   );

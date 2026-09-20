@@ -1,95 +1,107 @@
 import type { Applicability, AntigenSummary, MetricRow } from "../types";
-import { SPLIT_LABEL, isHeldOut } from "../data";
+import { isHeldOut } from "../data";
 
 interface Props {
   antigen: AntigenSummary;
   metrics: MetricRow[];
-  /** set for an uploaded structure, which has no split to be judged by */
+  /** set for a submitted structure, which has no evaluation split to be judged by */
   applicability?: Applicability;
   warnings?: string[];
 }
 
-/** How much to believe the numbers on screen, said before anyone reads them. */
+type Level = "high" | "moderate" | "low" | "seen" | "unrated";
+
+const SENTENCE: Record<Level, string> = {
+  high: "This virus type is close to the ones the model learned from.",
+  moderate: "This virus type differs from the ones the model learned from, but the ranking held up well on similar viruses.",
+  low: "This virus is unlike anything the model learned from. Treat the ranking as rough.",
+  seen: "The model learned from this structure, so its scores look better here than they would for a new virus.",
+  unrated: "This structure was left out of model building and testing.",
+};
+const BADGE: Record<Level, string> = {
+  high: "Confidence · High",
+  moderate: "Confidence · Moderate",
+  low: "Confidence · Low",
+  seen: "Used to build the model",
+  unrated: "Not evaluated",
+};
+const TONE: Record<Level, string> = { high: "good", moderate: "neutral", low: "warn", seen: "warn", unrated: "neutral" };
+
+/** Which of those five the structure on screen gets. Uploads are judged by distance from the training data. */
+function levelOf(split: string, applicability?: Applicability): Level {
+  if (split === "upload" && applicability) {
+    return applicability.level === "near" ? "high" : applicability.level === "held_out" ? "moderate" : "low";
+  }
+  if (split === "train") return "seen";
+  if (split === "val") return "high";
+  if (split === "test_group2") return "moderate";
+  if (split === "test_B") return "low";
+  return "unrated";
+}
+
+/**
+ * How far to trust the numbers on screen, in a sentence, before anyone reads them.
+ * The measurements behind it (AUPRC, baselines) are one click away rather than in the way.
+ */
 export function TrustBar({ antigen, metrics, applicability, warnings = [] }: Props) {
+  const level = levelOf(antigen.split, applicability);
+  const upload = antigen.split === "upload";
   const model = metrics.find((m) => m.split === antigen.split && m.scorer === "epitope_score");
   const baseline = metrics.find((m) => m.split === antigen.split && m.scorer === "rel_sasa_assembly");
-  const heldOut = isHeldOut(antigen.split);
-
-  let tone = "neutral";
-  let headline = SPLIT_LABEL[antigen.split] ?? antigen.split;
-  let detail = "";
-  if (antigen.split === "train") {
-    tone = "warn";
-    detail = "Training antigen. Scores are optimistic because the model was fit on this structure; use held-out antigens for performance estimates.";
-  } else if (antigen.split === "val") {
-    detail = "Validation antigen, used for model selection. Scores are slightly optimistic.";
-  } else if (antigen.split === "test_group2") {
-    tone = "good";
-    detail = "Held-out antigen from a phylogenetic group excluded from training. Performance here is an unbiased estimate.";
-  } else if (antigen.split === "test_B") {
-    tone = "warn";
-    detail = "Influenza B, phylogenetically distant from the training data (23–27% identity). Rankings are low-confidence; a structure-only model outperformed the full model on this set.";
-  } else if (antigen.split === "excluded") {
-    detail = "Excluded from training and evaluation.";
-  } else if (antigen.split === "upload" && applicability) {
-    tone = applicability.level === "far" ? "warn" : applicability.level === "near" ? "good" : "neutral";
-    headline = SPLIT_LABEL.upload;
-    detail = applicability.message;
-  }
-
-  if (antigen.split === "upload") {
-    return (
-      <div className={`trust ${tone}`}>
-        <div className="trust-head">
-          <span className="badge">{headline}</span>
-          <span>{detail}</span>
-        </div>
-        <div className="trust-stats">
-          {applicability?.expected_auprc != null && (
-            <div>
-              <span className="stat-value">{applicability.expected_auprc.toFixed(2)}</span>
-              <span className="stat-label">
-                Expected <abbr title="Area under the precision–recall curve">AUPRC</abbr> at this distance from the
-                training data (random ≈ 0.05). Estimated from held-out antigens; a submitted structure has no ground truth.
-              </span>
-            </div>
-          )}
-        </div>
-        {warnings.length > 0 && (
-          <ul className="trust-notes">
-            {warnings.map((w) => (
-              <li key={w}>{w}</li>
-            ))}
-          </ul>
-        )}
-      </div>
-    );
-  }
+  const auprc = <abbr title="Area under the precision–recall curve">AUPRC</abbr>;
 
   return (
-    <div className={`trust ${tone}`}>
+    <div className={`trust ${TONE[level]}`}>
       <div className="trust-head">
-        <span className="badge">{headline}</span>
-        <span>{detail}</span>
+        <span className="badge">{BADGE[level]}</span>
+        <span>{SENTENCE[level]}</span>
       </div>
-      <div className="trust-stats">
-        <div>
-          <span className="stat-value">{antigen.auprc === null ? "n/a" : antigen.auprc.toFixed(2)}</span>
-          <span className="stat-label">
-            <abbr title="Area under the precision–recall curve">AUPRC</abbr>, this chain
-            {antigen.nEpitope ? ` · ${antigen.nEpitope} of ${antigen.nResidues} residues are observed contacts` : ""}
-          </span>
+
+      {warnings.length > 0 && (
+        <ul className="trust-notes">
+          {warnings.map((w) => (
+            <li key={w}>{w}</li>
+          ))}
+        </ul>
+      )}
+
+      <details className="trust-details">
+        <summary>How is this measured?</summary>
+        <div className="trust-stats">
+          {upload && applicability && (
+            <>
+              <div>
+                <span className="stat-value">{applicability.expected_auprc?.toFixed(2) ?? "n/a"}</span>
+                <span className="stat-label">
+                  Expected {auprc} at this distance from the training data (chance ≈ 0.05), estimated from other viruses.
+                  A submitted structure has no ground truth.
+                </span>
+              </div>
+              <p className="trust-note">{applicability.message}</p>
+            </>
+          )}
+          {!upload && (
+            <>
+              <div>
+                <span className="stat-value">{antigen.auprc === null ? "n/a" : antigen.auprc.toFixed(2)}</span>
+                <span className="stat-label">
+                  {auprc} on this protein
+                  {antigen.nEpitope ? ` · ${antigen.nEpitope} of ${antigen.nResidues} amino acids are known antibody contacts` : ""}
+                </span>
+              </div>
+              {model && (
+                <div>
+                  <span className="stat-value">{model.auprc.toFixed(2)}</span>
+                  <span className="stat-label">
+                    {auprc}, {isHeldOut(antigen.split) ? "held-out" : "split"} average · surface-exposure baseline{" "}
+                    {baseline ? baseline.auprc.toFixed(2) : "?"} · chance {model.positive_rate.toFixed(2)}
+                  </span>
+                </div>
+              )}
+            </>
+          )}
         </div>
-        {model && (
-          <div>
-            <span className="stat-value">{model.auprc.toFixed(2)}</span>
-            <span className="stat-label">
-              <abbr title="Area under the precision–recall curve">AUPRC</abbr>, {heldOut ? "held-out" : "split"} average · surface-exposure
-              baseline {baseline ? baseline.auprc.toFixed(2) : "?"} · random {model.positive_rate.toFixed(2)}
-            </span>
-          </div>
-        )}
-      </div>
+      </details>
     </div>
   );
 }
