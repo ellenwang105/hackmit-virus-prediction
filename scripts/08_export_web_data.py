@@ -3,6 +3,7 @@
 Writes, under web/public/:
   data/index.json            one summary row per antigen chain (drives the picker)
   data/metrics.json          model vs surface-exposure baseline per split
+  data/sequences.json        antigen id -> amino-acid sequence, for search-by-sequence
   data/antigens/<id>.json    per-residue arrays for one chain, column-oriented
   structures/<pdb>.cif.gz    the mmCIF for every antigen the app can show
 
@@ -102,14 +103,18 @@ for stale in ANTIGEN_DIR.glob("*.json"):
     stale.unlink()
 
 index = []
+sequences = {}
 for antigen_id, chain in predictions.groupby("antigen_id", sort=True):
     chain = chain.sort_values(["residue_number", "insertion_code"], na_position="first")
     payload = antigen_payload(chain)
     (ANTIGEN_DIR / f"{antigen_id}.json").write_text(
         json.dumps(payload, separators=(",", ":")))
     index.append(summary_row(payload))
+    # residues in structure order, the sequence the model actually scored
+    sequences[antigen_id] = "".join(payload["aa"])
 
 (DATA_DIR / "index.json").write_text(json.dumps(index, separators=(",", ":")))
+(DATA_DIR / "sequences.json").write_text(json.dumps(sequences, separators=(",", ":")))
 
 metrics = pd.read_csv(METRICS_CSV)
 (DATA_DIR / "metrics.json").write_text(

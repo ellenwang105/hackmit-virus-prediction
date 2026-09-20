@@ -12,6 +12,8 @@ async function getJson<T>(path: string): Promise<T> {
 export const loadIndex = () => getJson<AntigenSummary[]>("data/index.json");
 export const loadMetrics = () => getJson<MetricRow[]>("data/metrics.json");
 export const loadPhylogeny = () => getJson<Phylogeny>("data/phylogeny.json");
+/** antigen id -> amino-acid sequence, the material sequence search runs against */
+export const loadSequences = () => getJson<Record<string, string>>("data/sequences.json");
 
 const antigenCache = new Map<string, Promise<Antigen>>();
 export function loadAntigen(id: string): Promise<Antigen> {
