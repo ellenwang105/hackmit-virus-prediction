@@ -15,3 +15,6 @@ results/*.parquet
 
 # structures are re-fetchable with download_structures.py
 # (currently still tracked — see README before untracking)
+
+# created by scripts/vercel-build.sh
+.build-venv/
