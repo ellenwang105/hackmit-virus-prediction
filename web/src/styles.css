@@ -50,7 +50,9 @@ code { font-family: var(--font-mono); background: var(--surface-2); padding: 1px
 
 .app { max-width: 1680px; margin: 0 auto; padding: 16px; }
 .masthead {
-  display: flex; justify-content: space-between; align-items: flex-end; gap: 12px 32px; flex-wrap: wrap;
+  /* the logo owns the top-right corner; the text column takes the rest, so the headline can never run under it */
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 14px 24px;
+  grid-template-areas: "text logo" "actions actions";
   padding: 18px 0 20px; margin-bottom: 16px; border-bottom: 1px solid var(--border);
 }
 .eyebrow { margin: 0 0 8px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
@@ -364,3 +366,12 @@ code { font-family: var(--font-mono); background: var(--surface-2); padding: 1px
 .trust-details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 .trust-details[open] summary { margin-bottom: 10px; }
 .trust-note { margin: 0; max-width: 62ch; color: var(--muted); }
+
+/* ---------- masthead logo ---------- */
+
+.masthead-text { grid-area: text; min-width: 0; }
+.masthead .header-right { grid-area: actions; }
+.brand-logo {
+  grid-area: logo; justify-self: end; display: block;
+  width: clamp(64px, 10vw, 148px); height: auto; aspect-ratio: 1; object-fit: contain;
+}
