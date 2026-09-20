@@ -1,4 +1,5 @@
 import type { Antigen, AntigenSummary, MetricRow, Phylogeny } from "./types";
+import { apiUrl } from "./api";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -50,11 +51,22 @@ export const residueLabel = (a: Antigen, i: number) => `${a.aa[i]}${a.ha[i]}`;
 export const SITE_LETTERS = ["A", "B", "C", "D", "E"] as const;
 
 export const SPLIT_LABEL: Record<string, string> = {
-  train: "Training",
+  train: "Training set",
   val: "Validation",
-  test_group2: "Test · group 2",
-  test_B: "Test · influenza B",
+  test_group2: "Held-out · group 2",
+  test_B: "Held-out · influenza B",
   excluded: "Excluded",
+  upload: "Submitted structure",
 };
 
 export const isHeldOut = (split: string) => split === "test_group2" || split === "test_B";
+
+/** An uploaded structure has no antibody, so nothing observed to compare a prediction with. */
+export const isUpload = (a: { split: string }) => a.split === "upload";
+
+/** Coordinates for an uploaded structure, held by the scoring server. */
+export async function loadUploadedStructure(source: { url: string }): Promise<string> {
+  const response = await fetch(apiUrl(source.url));
+  if (!response.ok) throw new Error(`structure: ${response.status}`);
+  return response.text();
+}

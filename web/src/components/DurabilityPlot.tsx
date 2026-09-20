@@ -29,6 +29,20 @@ export function DurabilityPlot({ antigen, selected, onHover, onSelect }: Props) 
     .map((score, i) => ({ i, score, constraint: antigen.constraint[i] }))
     .filter((p): p is { i: number; score: number; constraint: number } => p.constraint !== null);
 
+  if (points.length === 0 && antigen.source) {
+    return (
+      <div className="panel-body">
+        <div className="empty">
+          <strong>No durability score for this structure</strong>
+          <p>
+            Durability requires standard HA numbering and an influenza A subtype in the H1 or H3 reference groups.
+            The notes in the banner above state which condition was not met.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (points.length === 0) {
     return (
       <div className="panel-body">
@@ -40,7 +54,7 @@ export function DurabilityPlot({ antigen, selected, onHover, onSelect }: Props) 
           </p>
           <ol>
             <li>Align HA sequences from many seasons and compute per-position entropy.</li>
-            <li>Set <code>constraint_score = 1 − normalised entropy</code> and <code>durability_score = epitope × constraint</code>.</li>
+            <li>Set <code>constraint_score = 1 − normalized entropy</code> and <code>durability_score = epitope × constraint</code>.</li>
             <li>Re-run <code>scripts/08_export_web_data.py</code>; this tab fills in on its own.</li>
           </ol>
           <p className="muted">
@@ -59,12 +73,12 @@ export function DurabilityPlot({ antigen, selected, onHover, onSelect }: Props) 
   return (
     <div className="panel-body">
       <p className="panel-note">
-        Each dot is a residue. Top-right is durable: likely to be bound and unable to change. Click a dot to select it.
+        Each point is a residue. Upper right marks a candidate durable target: high predicted epitope probability and high evolutionary constraint. Select a point to locate it.
       </p>
       <svg viewBox={`0 0 ${W} ${H}`} className="scatter" role="img" aria-label="Epitope score against constraint">
         <rect x={x(0.5)} y={y(1)} width={x(1) - x(0.5)} height={y(0.5) - y(1)} className="quadrant" />
         <text x={x(1) - 4} y={y(1) + 12} textAnchor="end" className="axis-label">
-          durable target
+          candidate durable target
         </text>
         {[0, 0.25, 0.5, 0.75, 1].map((t) => (
           <g key={t}>
@@ -73,9 +87,9 @@ export function DurabilityPlot({ antigen, selected, onHover, onSelect }: Props) 
             <text x={x(t)} y={H - M.b + 13} textAnchor="middle" className="axis-label">{t}</text>
           </g>
         ))}
-        <text x={(M.l + W - M.r) / 2} y={H - 4} textAnchor="middle" className="axis-label">epitope score</text>
+        <text x={(M.l + W - M.r) / 2} y={H - 4} textAnchor="middle" className="axis-label">Epitope score</text>
         <text transform={`translate(10 ${(M.t + H - M.b) / 2}) rotate(-90)`} textAnchor="middle" className="axis-label">
-          constraint
+          Constraint
         </text>
         {points.map(({ i, score, constraint }) => (
           <circle

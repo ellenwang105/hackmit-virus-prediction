@@ -61,6 +61,18 @@ MAX_ESM_LENGTH = 1022
 NEAR_IDENTITY = 0.55
 FAR_IDENTITY = 0.35
 
+# Constraint was measured against an H1 alignment for group 1 subtypes and an H3
+# alignment for group 2. Influenza B sits outside both and is left unscored rather
+# than borrowing a number that was never measured for it.
+GROUP_1 = {"H1", "H2", "H5", "H6", "H8", "H9", "H11", "H12", "H13", "H16", "H17", "H18"}
+GROUP_2 = {"H3", "H4", "H7", "H10", "H14", "H15"}
+
+# Constraint is looked up by HA number, so it is only meaningful when the file
+# numbers residues the standard way. A file whose letters match the consensus at
+# their claimed positions less often than this is numbered some other way (1..N,
+# say); unrelated numbering agrees ~7% of the time by chance, real HA 40-95%.
+MIN_NUMBERING_AGREEMENT = 0.30
+
 warnings.simplefilter("ignore", PDBConstructionWarning)
 
 
@@ -104,19 +116,26 @@ def _decompress(data, filename):
     return data
 
 
-def parse_structure(data, filename="upload"):
-    """First model of an mmCIF or PDB file, given as bytes."""
+def decode_structure(data, filename="upload"):
+    """Decompressed text of a structure file, and whether it is "cif" or "pdb"."""
     text = _decompress(data, filename).decode("utf-8", errors="replace")
     head = text.lstrip()[:200]
-    is_cif = head.startswith("data_") or filename.lower().replace(".gz", "").endswith((".cif", ".mmcif"))
-    parser = MMCIFParser(QUIET=True) if is_cif else PDBParser(QUIET=True)
+    name = filename.lower().removesuffix(".gz")
+    is_cif = head.startswith("data_") or name.endswith((".cif", ".mmcif"))
+    return text, "cif" if is_cif else "pdb"
+
+
+def parse_structure(data, filename="upload"):
+    """First model of an mmCIF or PDB file, given as bytes."""
+    text, fmt = decode_structure(data, filename)
+    parser = MMCIFParser(QUIET=True) if fmt == "cif" else PDBParser(QUIET=True)
     try:
         structure = parser.get_structure("upload", io.StringIO(text))
         return next(structure.get_models())
     except Exception as exc:
         raise UnsupportedInput(
-            "This is not a readable structure file. Upload a .cif or .pdb "
-            "(optionally gzipped)."
+            "Unable to parse this file as a structure. Provide an mmCIF (.cif) or PDB (.pdb) "
+            "file, optionally gzipped."
         ) from exc
 
 
@@ -223,8 +242,8 @@ def embed(sequence):
 
     if len(sequence) > MAX_ESM_LENGTH:
         raise UnsupportedInput(
-            f"A chain of {len(sequence)} residues is longer than the language model "
-            f"can read ({MAX_ESM_LENGTH}). Upload a single hemagglutinin assembly."
+            f"A chain of {len(sequence)} residues exceeds the language model's "
+            f"{MAX_ESM_LENGTH:,}-residue context. Submit a single hemagglutinin assembly."
         )
     model, alphabet, device = _esm()
     _, _, tokens = alphabet.get_batch_converter()([("chain", sequence)])
@@ -240,23 +259,28 @@ def embed(sequence):
 def _applicability(reports):
     """How far this antigen is from the training data, and the accuracy measured there."""
     antigen = [r for r in reports if r.is_antigen]
-    best = max(antigen, key=lambda r: r.train_identity)
+    # Judged by the longest chain, not the closest one. Many files split HA into
+    # a head-bearing HA1 and a stalk-only HA2, and the stalk is conserved across
+    # subtypes: an H3's HA2 is 57% identical to H1 while its HA1 is 38%. Taking
+    # the maximum let the stalk make a held-out H3 read as a training-branch one.
+    best = max(antigen, key=lambda r: (r.length, -r.train_identity))
     shown = f"{best.closest_subtype}" if best.closest_subtype else "HA"
 
     if best.train_identity >= NEAR_IDENTITY:
         level, split = "near", "val"
-        message = (f"This looks like {shown}. It is {best.train_identity:.0%} identical to {best.train_subtype}, "
-                   "a subtype the model was trained on.")
+        message = (f"Classified as {shown}. {best.train_identity:.0%} sequence identity to {best.train_subtype}, "
+                   "a subtype in the training set.")
         if best.train_identity >= 0.98:
-            message += " It may be a training antigen itself, in which case the scores are optimistic."
+            message += " This may be a training antigen, in which case scores are optimistic."
     elif best.train_identity >= FAR_IDENTITY:
         level, split = "held_out", "test_group2"
-        message = (f"This looks like {shown}. The nearest subtype the model was trained on is "
-                   f"{best.train_subtype} at {best.train_identity:.0%}, so this is a branch it has not seen.")
+        message = (f"Classified as {shown}. Nearest training subtype: {best.train_subtype} "
+                   f"({best.train_identity:.0%} identity). This clade was not seen in training; "
+                   "expect performance similar to the held-out test set.")
     else:
         level, split = "far", "test_B"
-        message = (f"This looks like {shown}. It is only {best.train_identity:.0%} identical to anything "
-                   "the model was trained on, as distant as influenza B, where the ranking is low confidence.")
+        message = (f"Classified as {shown}. Only {best.train_identity:.0%} identity to any training subtype, "
+                   "comparable to influenza B; rankings are low-confidence.")
 
     expected = None
     if METRICS_PATH.exists():
@@ -274,6 +298,61 @@ def _applicability(reports):
         "expected_auprc": expected,
         "message": message,
     }
+
+
+# ------------------------------------------------------------------- constraint
+
+@functools.lru_cache(maxsize=1)
+def _constraint_table():
+    """(reference, piece, HA number) -> measured constraint and the consensus residue."""
+    table = pd.read_csv(
+        PREDICTIONS_PATH, low_memory=False,
+        usecols=["constraint_reference", "piece", "ha_number", "constraint_score", "residue"],
+    ).dropna(subset=["constraint_score", "constraint_reference"])
+    return (
+        table.groupby(["constraint_reference", "piece", "ha_number"])
+        .agg(constraint=("constraint_score", "first"), consensus=("residue", lambda s: s.mode().iloc[0]))
+        .reset_index()
+    )
+
+
+def _reference_for(subtype):
+    if subtype in GROUP_1:
+        return "H1"
+    if subtype in GROUP_2:
+        return "H3"
+    return ""
+
+
+def _attach_constraint(frame, reports, notes):
+    """Fill constraint and durability where the numbering supports it."""
+    by_chain = {r.chain: _reference_for(r.closest_subtype) for r in reports if r.is_antigen}
+    frame["constraint_reference"] = frame["antigen_chain"].map(by_chain).fillna("")
+    table = _constraint_table()
+
+    frame["constraint_score"] = np.nan
+    for chain, group in frame.groupby("antigen_chain", sort=False):
+        reference = by_chain.get(chain, "")
+        if not reference:
+            notes.append(f"Chain {chain} is outside the H1 and H3 references, so it has no durability score.")
+            continue
+        usable = group[group["on_frame"]]
+        lookup = table[table["constraint_reference"] == reference]
+        merged = usable.reset_index().merge(lookup, on=["piece", "ha_number"], how="inner").set_index("index")
+        if merged.empty:
+            notes.append(f"Chain {chain}: no residues sit at positions the constraint alignment covers.")
+            continue
+        agreement = float((merged["residue"] == merged["consensus"]).mean())
+        if agreement < MIN_NUMBERING_AGREEMENT:
+            notes.append(
+                f"Chain {chain}: residue numbering does not look like standard HA numbering "
+                f"(only {agreement:.0%} of residues match their positions), so durability is not shown."
+            )
+            continue
+        frame.loc[merged.index, "constraint_score"] = merged["constraint"].to_numpy()
+
+    frame["durability_score"] = frame["epitope_score"] * frame["constraint_score"]
+    return frame
 
 
 # --------------------------------------------------------------------- the entry
@@ -294,9 +373,9 @@ def predict(data, filename="upload"):
     if not antigen_ids:
         best = max(reports, key=lambda r: r.ha_score)
         raise UnsupportedInput(
-            "No influenza hemagglutinin was found in this file. The model only scores "
-            f"influenza HA (closest chain {best.chain}, alignment score {best.ha_score:.0f}; "
-            f"HA scores at least {HA_MIN_SCORE:.0f})."
+            "No influenza hemagglutinin found. This model scores influenza HA only "
+            f"(best chain {best.chain}, alignment score {best.ha_score:.0f}; "
+            f"HA chains score at least {HA_MIN_SCORE:.0f})."
         )
 
     # unique sequences are embedded once; a trimer is three identical chains
@@ -327,20 +406,19 @@ def predict(data, filename="upload"):
     frame["epitope_score"] = booster.predict_proba(frame[names])[:, 1]
 
     frame = annotate(frame, chain_column="antigen_id")
-    frame["constraint_score"] = np.nan   # needs the surveillance alignment; not wired up yet
-    frame["durability_score"] = np.nan
+    notes = []
+    frame = _attach_constraint(frame, reports, notes)
 
     columns = [
         "antigen_chain", "residue_number", "insertion_code", "residue", "seq_index",
-        "epitope_score", "constraint_score", "durability_score",
+        "epitope_score", "constraint_score", "durability_score", "constraint_reference",
         "rel_sasa_assembly", "glycan_distance",
         "chain_type", "piece", "ha_number", "on_frame", "region", "antigenic_site",
         "is_rbs", "is_fusion_machinery",
     ]
-    notes = []
     ignored = [r.chain for r in reports if not r.is_antigen]
     if ignored:
-        notes.append(f"Chains {', '.join(ignored)} were set aside as not hemagglutinin (antibody or other).")
+        notes.append(f"Chains {', '.join(ignored)} were set aside: not hemagglutinin (e.g., antibody).")
     off_frame = int((~frame["on_frame"]).sum())
     if off_frame:
         notes.append(f"{off_frame} residues fall outside the standard HA numbering and have no region label.")

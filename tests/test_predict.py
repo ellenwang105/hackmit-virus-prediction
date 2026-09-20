@@ -142,3 +142,59 @@ def test_a_file_with_no_hemagglutinin_is_refused():
 def test_garbage_is_refused_with_a_clear_message(payload):
     with pytest.raises(P.UnsupportedInput):
         P.predict(payload, "upload.cif")
+
+
+@pytest.mark.parametrize("pdb", ["5k9k", "6urm", "3gbm"])
+def test_constraint_matches_the_stored_measurement(pdb, stored):
+    """Constraint is a lookup by HA number, so it must reproduce exactly what the
+    constraint pipeline stored for the same residues, and durability is E x C."""
+    table = pd.read_csv(
+        ROOT / "results" / "epitope_predictions.csv", low_memory=False,
+        usecols=KEY + ["constraint_score"],
+    )
+    table["insertion_code"] = table["insertion_code"].fillna("").astype(str)
+    prediction = P.predict(structure_bytes(pdb), f"{pdb}.cif")
+    merged = prediction.residues.assign(PDB=pdb).merge(table, on=KEY, suffixes=("_new", "_old"))
+
+    both = merged.dropna(subset=["constraint_score_new", "constraint_score_old"])
+    assert len(both) > 0.8 * len(merged)
+    assert np.allclose(both["constraint_score_new"], both["constraint_score_old"], atol=1e-4)
+
+    scored = prediction.residues.dropna(subset=["durability_score"])
+    assert np.allclose(scored["durability_score"], scored["epitope_score"] * scored["constraint_score"])
+
+
+def test_influenza_b_has_no_durability_rather_than_a_borrowed_one():
+    prediction = P.predict(structure_bytes("9jno"), "9jno.cif")
+    assert prediction.residues["constraint_score"].isna().all()
+    assert any("outside the H1 and H3" in note for note in prediction.warnings)
+
+
+def test_unstandard_numbering_is_not_given_a_constraint():
+    """Renumber a real HA 1..N: the lookup would land on the wrong positions."""
+    from Bio.PDB import MMCIFParser
+    import gzip as gz
+
+    model = P.parse_structure(structure_bytes("5k9k"), "5k9k.cif")
+    for chain in model:
+        for n, residue in enumerate(list(chain), start=1):
+            residue.id = (residue.id[0], 10000 + n, " ")   # avoid clashes while renumbering
+        for n, residue in enumerate(list(chain), start=1):
+            residue.id = (residue.id[0], n, " ")
+
+    buffer = io.StringIO()
+    io_ = PDBIO()
+    io_.set_structure(model)
+    io_.save(buffer)
+    prediction = P.predict(buffer.getvalue().encode(), "renumbered.pdb")
+    assert prediction.residues["constraint_score"].isna().all()
+    assert any("does not look like standard HA numbering" in note for note in prediction.warnings)
+
+
+def test_split_head_and_stalk_file_is_judged_by_the_head():
+    """7K39 is an H3 stored as separate HA1 and HA2 chains. The stalk is conserved
+    across subtypes, so judging by the closest chain would call it a training-branch
+    antigen; the head is what diverges and what accuracy depends on."""
+    result = P.predict(structure_bytes("7k39"), "7k39.cif").applicability
+    assert result["level"] == "held_out"
+    assert result["identity_to_training"] < 0.5

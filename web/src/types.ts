@@ -3,7 +3,7 @@
  * that script; as long as these shapes hold, the UI needs no changes.
  */
 
-export type Split = "train" | "val" | "test_group2" | "test_B" | "excluded";
+export type Split = "train" | "val" | "test_group2" | "test_B" | "excluded" | "upload";
 
 /** One row of data/index.json, enough to draw the antigen picker. */
 export interface AntigenSummary {
@@ -37,7 +37,8 @@ export interface Antigen {
   aa: string[];
   /** residue on the standard H3 numbering */
   ha: number[];
-  region: ("head" | "stem")[];
+  /** "" where the residue falls outside the standard HA numbering */
+  region: ("head" | "stem" | "")[];
   /** antigenic site A-E, or "" */
   site: string[];
   rbs: number[];
@@ -50,6 +51,8 @@ export interface Antigen {
   score: number[];
   constraint: (number | null)[];
   durability: (number | null)[];
+  /** where to fetch coordinates from, for a structure that is not in the dataset */
+  source?: { url: string; format: "cif" | "pdb" };
 }
 
 export interface MetricRow {
@@ -86,4 +89,28 @@ export interface Phylogeny {
   tree: PhyloNode;
   subtypes: Record<string, SubtypeMeta>;
   identity: { names: string[]; matrix: number[][] };
+}
+
+/** How far an uploaded antigen sits from the data the model learned from. */
+export interface Applicability {
+  level: "near" | "held_out" | "far";
+  closest_subtype: string;
+  identity: number;
+  nearest_trained_subtype: string;
+  identity_to_training: number;
+  /** AUPRC measured on the split at this distance, or null if unavailable */
+  expected_auprc: number | null;
+  message: string;
+}
+
+/** POST /api/predict: one Antigen per hemagglutinin chain found in the file. */
+export interface UploadResult {
+  token: string;
+  label: string;
+  format: "cif" | "pdb";
+  structureUrl: string;
+  applicability: Applicability;
+  warnings: string[];
+  chains: { chain: string; length: number; isAntigen: boolean; haScore: number; subtype: string; identity: number }[];
+  antigens: Antigen[];
 }

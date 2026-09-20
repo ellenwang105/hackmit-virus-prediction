@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Antigen, AntigenSummary, MetricRow, Phylogeny } from "./types";
+import type { Antigen, AntigenSummary, MetricRow, Phylogeny, UploadResult } from "./types";
 import { loadAntigen, loadIndex, loadMetrics, loadPhylogeny } from "./data";
 import { findPatches } from "./patches";
 import { AntigenPicker } from "./components/AntigenPicker";
@@ -11,10 +11,12 @@ import { RegionSummary } from "./components/RegionSummary";
 import { DurabilityPlot } from "./components/DurabilityPlot";
 import { TrustBar } from "./components/TrustBar";
 import { Mechanism } from "./components/Mechanism";
+import { UploadPanel } from "./components/UploadPanel";
+import { UPLOAD_ENABLED } from "./api";
 
 type Tab = "hotspots" | "regions" | "durability";
 const TABS: [Tab, string][] = [
-  ["hotspots", "Hotspots"],
+  ["hotspots", "Patches"],
   ["regions", "Regions"],
   ["durability", "Durability"],
 ];
@@ -30,6 +32,7 @@ export function App() {
   const [index, setIndex] = useState<AntigenSummary[] | null>(null);
   const [metrics, setMetrics] = useState<MetricRow[]>([]);
   const [phylogeny, setPhylogeny] = useState<Phylogeny | null>(null);
+  const [upload, setUpload] = useState<UploadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [selectedId, setSelectedId] = useState(() => window.location.hash.slice(1));
@@ -65,7 +68,8 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!selectedId) return;
+    // an uploaded structure lives in memory, not in the dataset
+    if (!selectedId || selectedId.startsWith("upload:")) return;
     let cancelled = false;
     window.history.replaceState(null, "", `#${selectedId}`);
     loadAntigen(selectedId)
@@ -88,15 +92,57 @@ export function App() {
   // Keep the loaded antigen on screen while the next one fetches. Dropping to a
   // placeholder unmounts the viewer, which tears down its WebGL context and
   // collapses the page height, so every switch reads as a full reload.
-  const current = antigen;
-  const pending = Boolean(selectedId) && antigen?.id !== selectedId;
-  const summary = index?.find((a) => a.id === (current?.id ?? selectedId)) ?? null;
+  const uploadChain = selectedId.startsWith("upload:") ? selectedId.slice("upload:".length) : null;
+  const uploaded = upload && uploadChain ? (upload.antigens.find((a) => a.chain === uploadChain) ?? null) : null;
+  const current = uploaded ?? antigen;
+  const pending = !uploaded && !uploadChain && Boolean(selectedId) && antigen?.id !== selectedId;
+  const summary: AntigenSummary | null = uploaded
+    ? {
+        id: uploaded.id, pdb: uploaded.pdb, chain: uploaded.chain, subtype: uploaded.subtype, year: uploaded.year,
+        phylo: uploaded.phylo, split: "upload", chainType: uploaded.chainType, nResidues: uploaded.num.length,
+        nEpitope: 0, auprc: null,
+      }
+    : (index?.find((a) => a.id === (current?.id ?? selectedId)) ?? null);
 
   // stable identity: the viewer reloads its structure whenever this changes
   const antigenChains = useMemo(
-    () => (index && current ? index.filter((a) => a.pdb === current.pdb).map((a) => a.chain) : []),
-    [index, current],
+    () =>
+      upload && uploaded
+        ? upload.antigens.map((a) => a.chain)
+        : index && current
+          ? index.filter((a) => a.pdb === current.pdb).map((a) => a.chain)
+          : [],
+    [index, current, upload, uploaded],
   );
+
+  const resetSelection = useCallback(() => {
+    setSelected([]);
+    setHovered(null);
+    setFocus(null);
+    setCa(null);
+  }, []);
+  const showUpload = useCallback(
+    (result: UploadResult) => {
+      resetSelection();
+      setUpload(result);
+      setSelectedId(`upload:${result.antigens[0].chain}`);
+    },
+    [resetSelection],
+  );
+  const pickUploadChain = useCallback(
+    (chain: string) => {
+      resetSelection();
+      setSelectedId(`upload:${chain}`);
+    },
+    [resetSelection],
+  );
+  const clearUpload = useCallback(() => {
+    setUpload(null);
+    if (uploadChain && index) {
+      resetSelection();
+      setSelectedId((index.find((r) => r.id === DEFAULT_ID) ?? index[0]).id);
+    }
+  }, [uploadChain, index, resetSelection]);
   const patches = useMemo(() => (current ? findPatches(current, ca) : []), [current, ca]);
 
   const select = useCallback((indices: number[], additive: boolean) => {
@@ -121,7 +167,7 @@ export function App() {
   if (error) {
     return (
       <div className="fatal">
-        <h1>Couldn't load data</h1>
+        <h1>Unable to load data</h1>
         <p>{error}</p>
         <p className="muted">
           Run <code>python scripts/08_export_web_data.py</code> from the repo root to generate <code>web/public/data</code>.
@@ -132,15 +178,22 @@ export function App() {
 
   return (
     <div className="app">
-      <header className="header">
+      <header className="masthead">
         <div>
-          <h1>Epitope Explorer</h1>
-          <p className="muted">Where on influenza hemagglutinin antibodies are likely to bind</p>
+          <p className="eyebrow">Influenza hemagglutinin · Preclinical target selection</p>
+          <h1>
+            Epitope prioritization for <em>durable</em> antibody targets
+          </h1>
+          <p className="standfirst">
+            Residue-level prediction of antibody-binding sites, combined with cross-strain conservation to rank epitopes
+            that are unlikely to be lost to viral escape. Trained on solved antibody–antigen structures and validated on
+            held-out influenza subtypes.
+          </p>
         </div>
         <div className="key">
-          <span><i className="key-swatch" style={{ background: "var(--antibody)" }} /> antibody</span>
-          <span><i className="key-swatch" style={{ background: "var(--ghost)" }} /> other HA copies</span>
-          <span><i className="key-swatch" style={{ background: "var(--truth)" }} /> observed epitope</span>
+          <span><i className="key-swatch" style={{ background: "var(--antibody)" }} /> bound antibody</span>
+          <span><i className="key-swatch" style={{ background: "var(--ghost)" }} /> other protomers</span>
+          {!uploaded && <span><i className="key-swatch" style={{ background: "var(--truth)" }} /> observed contact</span>}
           <span><i className="key-swatch" style={{ background: "var(--select)" }} /> selected</span>
           <span><i className="key-swatch" style={{ background: "var(--glycan)" }} /> glycan</span>
         </div>
@@ -148,13 +201,37 @@ export function App() {
 
       <div className="layout">
         {index ? (
-          <AntigenPicker index={index} phylogeny={phylogeny} selectedId={selectedId} onSelect={setSelectedId} />
+          <AntigenPicker
+            index={index}
+            phylogeny={phylogeny}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            highlightSubtype={uploaded?.subtype}
+            top={
+              UPLOAD_ENABLED ? (
+                <UploadPanel
+                  upload={upload}
+                  activeChain={uploadChain}
+                  onResult={showUpload}
+                  onPickChain={pickUploadChain}
+                  onClear={clearUpload}
+                />
+              ) : undefined
+            }
+          />
         ) : (
-          <aside className="picker muted">Loading antigens…</aside>
+          <aside className="picker muted">Loading antigen index…</aside>
         )}
 
         <main className={pending ? "main is-switching" : "main"} aria-busy={pending}>
-          {summary && <TrustBar antigen={summary} metrics={metrics} />}
+          {summary && (
+            <TrustBar
+              antigen={summary}
+              metrics={metrics}
+              applicability={uploaded ? upload?.applicability : undefined}
+              warnings={uploaded ? upload?.warnings : undefined}
+            />
+          )}
 
           {current ? (
             <>
@@ -192,6 +269,7 @@ export function App() {
                       selected={selected}
                       onPick={pickPatch}
                       onClear={() => setSelected([])}
+                      showObserved={!uploaded}
                     />
                   )}
                   {tab === "regions" && <RegionSummary antigen={current} />}
@@ -205,12 +283,19 @@ export function App() {
               <ScoreTrack antigen={current} hovered={hovered} selected={selected} onHover={setHovered} onSelect={select} />
             </>
           ) : (
-            <div className="loading-main muted">Loading antigen…</div>
+            <div className="loading-main muted">Loading structure…</div>
           )}
 
           <Mechanism metrics={metrics} />
         </main>
       </div>
+
+      <footer className="page-foot">
+        <span>Data: PDB via SAbDab</span>
+        <span>Language model: ESM-2 (650M)</span>
+        <span>Classifier: gradient-boosted trees (XGBoost)</span>
+        <span>Research prototype for target prioritization; not for clinical decision-making</span>
+      </footer>
     </div>
   );
 }

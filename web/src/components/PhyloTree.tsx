@@ -13,7 +13,8 @@ interface Props {
 const ROW = 26;
 const PAD_TOP = 10;
 const PAD_BOTTOM = 6;
-const LABEL_W = 92;
+// wide enough for a mono subtype name beside its "165 · held out" count, which no longer fit at 92
+const LABEL_W = 138;
 const LEFT = 4;
 
 function tipsOf(node: PhyloNode, out: PhyloNode[] = []) {
@@ -107,7 +108,7 @@ export function PhyloTree({ phylogeny, value, filter, onChange }: Props) {
               </text>
               <text className="phylo-count" x={222} y={y + 4} textAnchor="end">
                 {meta?.chains ?? 0}
-                {meta?.heldOut ? " ·held out" : ""}
+                {meta?.heldOut ? " · held out" : ""}
               </text>
             </g>
           );
@@ -115,8 +116,8 @@ export function PhyloTree({ phylogeny, value, filter, onChange }: Props) {
       </svg>
 
       <p className="phylo-note">
-        Trained on <b>group 1</b> only. Everything else is held out — scores fall off with
-        distance down these branches.
+        Trained on <b>group 1</b> subtypes only. All other subtypes are held out; accuracy decreases with
+        phylogenetic distance from the training set.
       </p>
     </div>
   );

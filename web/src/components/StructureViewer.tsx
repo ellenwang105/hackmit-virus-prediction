@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as $3Dmol from "3dmol";
 import type { Antigen } from "../types";
-import { loadStructure } from "../data";
+import { isUpload, loadStructure, loadUploadedStructure } from "../data";
 import {
   GHOST_COLOR,
   ANTIBODY_COLOR,
@@ -50,6 +50,23 @@ interface Loaded {
 }
 
 const GLYCAN_RESN = ["NAG", "NDG", "BMA", "MAN", "FUC", "GAL", "SIA", "GLC", "XYS"];
+
+/**
+ * Which checkboxes have anything to act on in the structure that is loaded. A
+ * box that silently does nothing looks broken, so the ones with nothing to draw
+ * are disabled and say why: a structure with no bound antibody (an upload of an
+ * apo HA, say) has no antibody to show, and 31 of the 216 structures model no glycans.
+ */
+type Available = Record<keyof ViewerOptions, boolean>;
+const ALL_AVAILABLE: Available = {
+  showSites: true, showTruth: true, showSurface: true, showAntibodies: true, showOtherCopies: true, showGlycans: true,
+};
+const UNAVAILABLE_REASON: Partial<Record<keyof ViewerOptions, string>> = {
+  showAntibodies: "This file contains no antibody chain",
+  showOtherCopies: "This file contains no other protomers of this antigen",
+  showGlycans: "No modeled glycans in this file",
+  showTruth: "No observed antibody contacts on this chain",
+};
 
 /**
  * Camera rotation that stands the spike upright with its head at the top.
@@ -157,7 +174,7 @@ function mapResidues(model: any, antigen: Antigen, allChains: string[], antigenC
   if (placed < 0.9 * antigen.num.length) {
     console.warn(
       `[epitope-explorer] ${antigen.id}: only ${placed} of ${antigen.num.length} residues matched the structure; ` +
-        "colours may be misplaced (residue numbering mismatch?)",
+        "colors may be misplaced (residue numbering mismatch?)",
     );
   }
 
@@ -165,7 +182,7 @@ function mapResidues(model: any, antigen: Antigen, allChains: string[], antigenC
     atomIndex,
     ca,
     antibodyChains: allChains.filter((c) => !antigenChains.includes(c)),
-    otherAntigenChains: antigenChains.filter((c) => c !== antigen.chain),
+    otherAntigenChains: antigenChains.filter((c) => c !== antigen.chain && allChains.includes(c)),
   };
 }
 
@@ -180,8 +197,27 @@ const SITE_MIN_SCORE = 0.1;
 /** circle radius in angstrom for scores below 0.3, 0.3-0.5 and above 0.5 */
 const SITE_RADIUS = [1.0, 1.5, 2.0] as const;
 const SITE_BREAKS = [0.3, 0.5] as const;
-/** wireframe cage around residues an antibody was actually seen touching */
-const HALO_RADIUS = 3.0;
+/** ring radius around residues an antibody was actually seen touching */
+const HALO_RADIUS = 2.7;
+
+/**
+ * Three orthogonal circles round a point: reads as a ring from any angle, and
+ * stays sparse. A wireframe sphere did the same job but is a dense mesh, and at
+ * this scale it read as a solid blob that hid the circle it was meant to frame.
+ */
+function ringsAround(viewer: any, centre: { x: number; y: number; z: number }, radius: number) {
+  const segments = 28;
+  return (["xy", "yz", "xz"] as const).map((plane) => {
+    const points = Array.from({ length: segments + 1 }, (_, k) => {
+      const angle = (2 * Math.PI * k) / segments;
+      const point: Record<string, number> = { ...centre };
+      point[plane[0]] += radius * Math.cos(angle);
+      point[plane[1]] += radius * Math.sin(angle);
+      return point as { x: number; y: number; z: number };
+    });
+    return viewer.addCurve({ points, radius: 0.13, smooth: 1, fill: false, color: hex(TRUTH_COLOR) });
+  });
+}
 
 function siteCutoff(score: number[]) {
   const sorted = [...score].sort((a, b) => b - a);
@@ -212,7 +248,7 @@ function applyStyles(
   // read as "the antibody" and the Antibodies checkbox appeared to do nothing.
   if (options.showOtherCopies && loaded.otherAntigenChains.length) {
     viewer.setStyle({ chain: loaded.otherAntigenChains, hetflag: false }, {
-      cartoon: { color: GHOST_COLOR, opacity: 0.3 },
+      cartoon: { color: GHOST_COLOR, opacity: 0.45 },
     });
   }
   if (options.showAntibodies && loaded.antibodyChains.length) {
@@ -243,17 +279,16 @@ function applyStyles(
 
   if (options.showGlycans) {
     viewer.setStyle({ hetflag: true, resn: GLYCAN_RESN }, {
-      stick: { radius: 0.14, color: hex(GLYCAN_COLOR) },
+      stick: { radius: 0.22, color: hex(GLYCAN_COLOR) },
     });
   }
-  // A cage on every observed contact, whether or not the model marked it, so a
-  // cage around a filled circle is a hit and a bare cage is a miss.
+  // A ring on every observed contact, whether or not the model marked it, so a
+  // ring around a filled circle is a hit and a bare ring is a miss.
   //
-  // Two constraints shaped this. They are shapes rather than atom styles
-  // because 3Dmol keeps one sphere style per atom and merges later ones into
-  // it, so a halo added as a style would replace the predicted-site circle
-  // instead of surrounding it. And they are wireframes rather than translucent
-  // shells because alpha shapes did not render here at all, while an opaque one
+  // Shapes rather than atom styles, because 3Dmol keeps one sphere style per atom
+  // and merges later ones into it, so a halo added as a style would replace the
+  // predicted-site circle instead of surrounding it. Thin rings rather than
+  // shells, because alpha shapes did not render here at all and an opaque one
   // buries the circle it is meant to highlight.
   halos.current.forEach((shape) => viewer.removeShape(shape));
   halos.current = [];
@@ -261,12 +296,7 @@ function applyStyles(
     antigen.epitope.forEach((observed, i) => {
       if (!observed || Number.isNaN(loaded.ca[3 * i])) return;
       halos.current.push(
-        viewer.addSphere({
-          center: { x: loaded.ca[3 * i], y: loaded.ca[3 * i + 1], z: loaded.ca[3 * i + 2] },
-          radius: HALO_RADIUS,
-          color: hex(TRUTH_COLOR),
-          wireframe: true,
-        }),
+        ...ringsAround(viewer, { x: loaded.ca[3 * i], y: loaded.ca[3 * i + 1], z: loaded.ca[3 * i + 2] }, HALO_RADIUS),
       );
     });
   }
@@ -320,6 +350,7 @@ export function StructureViewer(props: Props) {
   const handlers = useRef(props);
   handlers.current = props;
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [available, setAvailable] = useState<Available>(ALL_AVAILABLE);
   const [message, setMessage] = useState("");
 
   // one WebGL viewer for the life of the component
@@ -348,17 +379,26 @@ export function StructureViewer(props: Props) {
     handlers.current.onCoords(null);
     loadedRef.current = null;
 
-    loadStructure(antigen.pdb)
+    (antigen.source ? loadUploadedStructure(antigen.source) : loadStructure(antigen.pdb))
       .then((text) => {
         if (cancelled || !viewer) return;
         viewer.removeAllModels();
         viewer.removeAllShapes();
         markerRef.current = null;
         haloRef.current = [];
-        const model = viewer.addModel(text, "cif");
-        const allChains = [...new Set<string>(model.selectedAtoms({}).map((a: any) => a.chain))];
+        const model = viewer.addModel(text, antigen.source?.format ?? "cif");
+        // chains that hold protein; a chain of only sugars or waters is not an antibody
+        const allChains = [...new Set<string>(model.selectedAtoms({ hetflag: false }).map((a: any) => a.chain))];
         const loaded = mapResidues(model, antigen, allChains, antigenChains);
         loadedRef.current = loaded;
+        setAvailable({
+          showSites: true,
+          showSurface: true,
+          showTruth: antigen.epitope.some((e) => e === 1),
+          showAntibodies: loaded.antibodyChains.length > 0,
+          showOtherCopies: loaded.otherAntigenChains.length > 0,
+          showGlycans: model.selectedAtoms({ hetflag: true, resn: GLYCAN_RESN }).length > 0,
+        });
 
         const own = { chain: antigen.chain, hetflag: false };
         const index = (atom: any) => loaded.atomIndex.get(atom.serial);
@@ -454,19 +494,24 @@ export function StructureViewer(props: Props) {
       <div className="viewer-toolbar">
         {(
           [
-            ["showSites", "Predicted sites"],
-            ["showTruth", "Observed epitope"],
+            ["showSites", "Predicted epitope"],
+            ["showTruth", "Observed contacts"],
             ["showSurface", "Surface"],
-            ["showAntibodies", "Antibody"],
-            ["showOtherCopies", "Other HA copies"],
+            ["showAntibodies", "Bound antibody"],
+            ["showOtherCopies", "Other protomers"],
             ["showGlycans", "Glycans"],
           ] as const
-        ).map(([key, label]) => (
-          <label key={key} className="check">
-            <input type="checkbox" checked={options[key]} onChange={() => toggle(key)} />
-            {label}
-          </label>
-        ))}
+        )
+          .filter(([key]) => key !== "showTruth" || !isUpload(antigen))
+          .map(([key, label]) => {
+            const usable = available[key];
+            return (
+              <label key={key} className={usable ? "check" : "check unavailable"} title={usable ? undefined : UNAVAILABLE_REASON[key]}>
+                <input type="checkbox" checked={options[key] && usable} disabled={!usable} onChange={() => toggle(key)} />
+                {label}
+              </label>
+            );
+          })}
         <button
           className="ghost-button"
           onClick={() => viewerRef.current?.zoomTo({ chain: antigen.chain, hetflag: false }, 500)}
@@ -476,11 +521,11 @@ export function StructureViewer(props: Props) {
       </div>
       {status !== "ready" && (
         <div className="viewer-status" role="status">
-          {status === "loading" ? "Loading structure…" : `Could not load structure: ${message}`}
+          {status === "loading" ? "Loading structure…" : `Unable to load structure: ${message}`}
         </div>
       )}
       <div className="viewer-legend">
-        <span className="legend-title">Predicted probability</span>
+        <span className="legend-title">Epitope probability</span>
         <div className="legend-bar" style={{ background: legendGradient() }} />
         <div className="legend-ticks">
           {LEGEND_TICKS.map((t) => (

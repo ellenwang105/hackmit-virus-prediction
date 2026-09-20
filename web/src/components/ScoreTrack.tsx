@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import type { Antigen } from "../types";
+import { isUpload } from "../data";
 import { useElementWidth } from "../hooks";
 import { FUNCTION_COLOR, REGION_COLOR, SELECT_COLOR, SITE_COLOR, TRUTH_COLOR, scoreCss } from "../color";
 
@@ -141,11 +142,13 @@ export function ScoreTrack({ antigen, hovered, selected, onHover, onSelect }: Pr
             />
           ))}
 
-          {/* observed epitope ticks */}
-          <text x={LEFT - 6} y={truthTop + STRIP - 1} textAnchor="end" className="axis-label">
-            Observed
-          </text>
-          {antigen.epitope.map(
+          {/* observed epitope ticks; an upload has no antibody, so no row */}
+          {!isUpload(antigen) && (
+            <text x={LEFT - 6} y={truthTop + STRIP - 1} textAnchor="end" className="axis-label">
+              Observed
+            </text>
+          )}
+          {!isUpload(antigen) && antigen.epitope.map(
             (e, i) =>
               e === 1 && (
                 <rect key={i} x={LEFT + i * step} y={truthTop} width={Math.max(1, step - 0.4)} height={STRIP} fill={TRUTH_COLOR} />
@@ -203,9 +206,9 @@ export function ScoreTrack({ antigen, hovered, selected, onHover, onSelect }: Pr
           ["Head", REGION_COLOR.head],
           ["Stem", REGION_COLOR.stem],
           ...Object.entries(SITE_COLOR).map(([s, c]) => [`Site ${s}`, c]),
-          ["Receptor pocket", FUNCTION_COLOR.rbs],
+          ["Receptor-binding site", FUNCTION_COLOR.rbs],
           ["Fusion machinery", FUNCTION_COLOR.fusion],
-          ["Observed epitope", TRUTH_COLOR],
+          ...(isUpload(antigen) ? [] : [["Observed contact", TRUTH_COLOR]]),
         ].map(([label, color]) => (
           <span key={label}>
             <i className="key-swatch" style={{ background: color }} />
@@ -214,7 +217,7 @@ export function ScoreTrack({ antigen, hovered, selected, onHover, onSelect }: Pr
         ))}
       </div>
       <div className="track-caption">
-        HA numbering (H3) · dashed line = 5%, the share of residues that are epitope · click or drag to select · Shift adds to the selection
+        H3 numbering · dashed line: 5% base rate of epitope residues · click or drag to select; Shift to add
       </div>
     </div>
   );

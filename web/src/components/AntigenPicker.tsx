@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { AntigenSummary, Phylogeny } from "../types";
 import { SPLIT_LABEL, isHeldOut } from "../data";
 import { PhyloTree } from "./PhyloTree";
@@ -8,6 +8,10 @@ interface Props {
   phylogeny: Phylogeny | null;
   selectedId: string;
   onSelect: (id: string) => void;
+  /** rendered above the tree, for the upload panel */
+  top?: ReactNode;
+  /** subtype to light up in the tree when the antigen on screen is not in the index */
+  highlightSubtype?: string;
 }
 
 const SPLIT_ORDER = ["test_group2", "test_B", "val", "train", "excluded"];
@@ -39,7 +43,7 @@ function representativeOf(index: AntigenSummary[], subtype: string): AntigenSumm
   return sorted[Math.floor(sorted.length / 2)];
 }
 
-export function AntigenPicker({ index, phylogeny, selectedId, onSelect }: Props) {
+export function AntigenPicker({ index, phylogeny, selectedId, onSelect, top, highlightSubtype }: Props) {
   const [query, setQuery] = useState("");
   const [subtype, setSubtype] = useState("all");
   const [split, setSplit] = useState("all");
@@ -64,10 +68,11 @@ export function AntigenPicker({ index, phylogeny, selectedId, onSelect }: Props)
 
   return (
     <aside className="picker">
+      {top}
       {phylogeny && (
         <PhyloTree
           phylogeny={phylogeny}
-          value={index.find((a) => a.id === selectedId)?.subtype ?? "all"}
+          value={index.find((a) => a.id === selectedId)?.subtype ?? highlightSubtype ?? "all"}
           filter={subtype}
           onChange={(next) => {
             setSubtype(next);
@@ -84,7 +89,7 @@ export function AntigenPicker({ index, phylogeny, selectedId, onSelect }: Props)
       <input
         className="input"
         type="search"
-        placeholder="Search PDB id, e.g. 3sdy"
+        placeholder="Search PDB ID (e.g., 3SDY)"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         aria-label="Search antigens"
@@ -92,7 +97,7 @@ export function AntigenPicker({ index, phylogeny, selectedId, onSelect }: Props)
       <div className="filters">
         {strays.length > 0 && (
           <select className="input" value={subtype} onChange={(e) => setSubtype(e.target.value)} aria-label="Other subtypes">
-            <option value="all">Other subtypes</option>
+            <option value="all">Other</option>
             {strays.map((s) => (
               <option key={s} value={s}>
                 {s}

@@ -99,7 +99,7 @@ function compressRanges(numbers: number[]): string {
 function tagsFor(antigen: Antigen, indices: number[]): string[] {
   const share = (test: (i: number) => boolean) => indices.filter(test).length / indices.length;
   const tags: string[] = [];
-  if (share((i) => antigen.rbs[i] === 1) >= 1 / 3) tags.push("Receptor pocket");
+  if (share((i) => antigen.rbs[i] === 1) >= 1 / 3) tags.push("Receptor-binding site");
   if (share((i) => antigen.fusion[i] === 1) >= 1 / 3) tags.push("Fusion machinery");
   for (const site of ["A", "B", "C", "D", "E"]) {
     if (share((i) => antigen.site[i] === site) >= 1 / 3) tags.push(`Site ${site}`);

@@ -7,17 +7,18 @@ interface Props {
 
 const SPLIT_ORDER = ["val", "test_group2", "test_B"];
 const SPLIT_NOTE: Record<string, string> = {
-  val: "H5 — same branch as training",
-  test_group2: "H3, H7, H10, H14 — a branch never trained on",
-  test_B: "influenza B — 23–27% identity, the far edge",
+  val: "H5 · same clade as training",
+  test_group2: "H3, H4, H7, H10, H14 · clade unseen in training",
+  test_B: "23–27% identity to the training set",
 };
 
 /**
- * Why any of this matters, for someone who has not spent a week on it.
+ * The rationale, the method and the limits, for a reader deciding whether to trust the tool.
  *
- * The tool above assumes you know what an epitope is and why the stem is worth
- * more than the head. This says it once, with the mechanism drawn rather than
- * described, and states the limits before a reader has to find them.
+ * The tool above assumes familiarity with epitopes and with why a conserved
+ * region is a better target than a variable one. This states that once, with the
+ * mechanism drawn rather than described, and gives the limits before a reader
+ * has to go looking for them.
  */
 export function Mechanism({ metrics }: Props) {
   const rows = SPLIT_ORDER.map((split) => ({
@@ -43,14 +44,14 @@ export function Mechanism({ metrics }: Props) {
             <circle cx="54" cy="100" r="16" fill="currentColor" opacity=".26" />
             <line x1="116" y1="36" x2="116" y2="88" stroke="currentColor" strokeWidth="7" strokeLinecap="round" opacity=".4" />
             <circle cx="116" cy="100" r="16" fill="currentColor" opacity=".26" />
-            <text x="72" y="70" className="fig-small">stem</text>
+            <text x="72" y="70" className="fig-small">stalk</text>
             <text x="72" y="104" className="fig-small">head</text>
 
             <path d="M230 98 L212 90 L212 106 Z" fill="var(--accent)" />
             <rect x="230" y="82" width="28" height="32" rx="6" fill="var(--accent)" />
             <path d="M258 90 L288 72" stroke="var(--accent)" strokeWidth="7" strokeLinecap="round" />
             <path d="M258 106 L288 124" stroke="var(--accent)" strokeWidth="7" strokeLinecap="round" />
-            <text x="248" y="146" className="fig-small accent" textAnchor="middle">antibody</text>
+            <text x="252" y="66" className="fig-small accent" textAnchor="middle">antibody</text>
             <line x1="192" y1="98" x2="210" y2="98" stroke="var(--accent)" strokeWidth="1.4" markerEnd="url(#mech-tip)" />
 
             <text x="412" y="14" className="fig-label" textAnchor="end">HOST CELL</text>
@@ -60,34 +61,34 @@ export function Mechanism({ metrics }: Props) {
             <text x="358" y="174" className="fig-small">receptor</text>
 
             <line x1="134" y1="140" x2="338" y2="140" stroke="currentColor" strokeWidth="1.2" strokeDasharray="4 4" markerEnd="url(#mech-tip)" />
-            <text x="236" y="156" className="fig-small" textAnchor="middle">head must reach the receptor</text>
+            <text x="236" y="156" className="fig-small" textAnchor="middle">head engages receptor</text>
 
             <line x1="148" y1="98" x2="174" y2="98" stroke="currentColor" strokeWidth="1.2" strokeDasharray="3 3" />
             <line x1="174" y1="89" x2="190" y2="107" stroke="var(--accent)" strokeWidth="2.2" />
             <line x1="174" y1="107" x2="190" y2="89" stroke="var(--accent)" strokeWidth="2.2" />
-            <text x="182" y="192" className="fig-small accent" textAnchor="middle">blocked</text>
+            <text x="182" y="126" className="fig-small accent" textAnchor="middle">blocked</text>
           </svg>
           <figcaption>
-            <b>What an epitope is.</b> The patch an antibody clamps onto. Cover the right
-            patch and the spike can never reach the cell, so the virus cannot get in.
+            <b>Neutralization.</b> An epitope is the surface patch an antibody binds. An antibody bound
+            to the receptor-binding head sterically blocks attachment to host receptors and prevents entry.
           </figcaption>
         </figure>
 
         <figure className="figure">
           <svg viewBox="0 0 420 210" role="img" aria-label="The spike head mutates between seasons so old antibodies stop fitting, while the stem stays unchanged">
-            <text x="8" y="14" className="fig-label">2015</text>
+            <text x="8" y="14" className="fig-label">EARLIER STRAIN</text>
             <line x1="60" y1="142" x2="60" y2="92" stroke="currentColor" strokeWidth="7" strokeLinecap="round" opacity=".4" />
             <circle cx="60" cy="76" r="19" fill="currentColor" opacity=".26" />
             <rect x="8" y="142" width="104" height="13" rx="6" fill="currentColor" opacity=".14" />
             <path d="M42 52 L60 36 L78 52" fill="none" stroke="var(--accent)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-            <text x="60" y="26" className="fig-small accent" textAnchor="middle">fits</text>
+            <text x="60" y="26" className="fig-small accent" textAnchor="middle">binds</text>
 
             <line x1="146" y1="56" x2="192" y2="56" stroke="currentColor" strokeWidth="1.2" markerEnd="url(#mech-tip)" />
-            <text x="169" y="48" className="fig-small" textAnchor="middle">drifts</text>
+            <text x="169" y="48" className="fig-small" textAnchor="middle">substitutions</text>
             <line x1="146" y1="124" x2="192" y2="124" stroke="currentColor" strokeWidth="1.2" markerEnd="url(#mech-tip)" />
-            <text x="169" y="116" className="fig-small" textAnchor="middle">cannot drift</text>
+            <text x="169" y="116" className="fig-small" textAnchor="middle">conserved</text>
 
-            <text x="228" y="14" className="fig-label">2025</text>
+            <text x="228" y="14" className="fig-label">LATER STRAIN</text>
             <line x1="282" y1="142" x2="282" y2="92" stroke="currentColor" strokeWidth="7" strokeLinecap="round" opacity=".4" />
             <path d="M262 70 q8 -12 18 -5 q4 -14 16 -6 q10 8 2 18 q6 12 -8 15 q-12 8 -20 -3 q-14 -1 -8 -19 z" fill="currentColor" opacity=".26" />
             <rect x="228" y="142" width="104" height="13" rx="6" fill="currentColor" opacity=".14" />
@@ -95,46 +96,47 @@ export function Mechanism({ metrics }: Props) {
             <line x1="272" y1="30" x2="292" y2="48" stroke="var(--accent)" strokeWidth="2.2" />
             <line x1="272" y1="48" x2="292" y2="30" stroke="var(--accent)" strokeWidth="2.2" />
 
-            <text x="210" y="180" className="fig-small" textAnchor="middle">the head changes shape every season; the stem cannot</text>
-            <text x="210" y="196" className="fig-small muted-text" textAnchor="middle">a stem that drifts is a spike that can no longer fuse</text>
+            <text x="210" y="180" className="fig-small" textAnchor="middle">head domain: variable · stalk: conserved</text>
+            <text x="210" y="196" className="fig-small muted-text" textAnchor="middle">stalk substitutions impair membrane fusion</text>
           </svg>
           <figcaption>
-            <b>Why last year's shot stops working.</b> The head tolerates change, so it drifts
-            and old antibodies stop fitting. The stem drives membrane fusion and cannot drift
-            without breaking the spike — which is what the <b>Durability</b> tab ranks.
+            <b>Antigenic drift and escape.</b> The head domain tolerates substitutions, so antibodies raised
+            against earlier strains lose binding. The stalk mediates membrane fusion and is functionally
+            constrained, which is what the <b>Durability</b> view ranks. Several SARS-CoV-2 monoclonal
+            antibodies lost activity when variants altered their epitopes.
           </figcaption>
         </figure>
       </div>
 
       <div className="explain-cols">
         <div>
-          <h3>How the score is made</h3>
+          <h3>Method</h3>
           <ol className="explain-steps">
             <li>
-              <b>Describe each residue</b> with the antibody deleted — exposure on the chain and
-              on the assembled spike, protrusion, distance to the nearest glycan, neighbourhood
-              averages, and 128 components of an ESM-2 embedding.
+              <b>Featurization.</b> Each residue is described from the antigen alone, with the antibody
+              removed: solvent exposure on the chain and on the assembled trimer, protrusion, distance
+              to the nearest glycan, neighborhood averages, and 128 principal components of ESM-2
+              embeddings.
             </li>
             <li>
-              <b>Learn from solved structures.</b> A residue is an epitope when any atom sits
-              within 4.5 Å of a bound antibody, pooled over every antibody solved against that
-              antigen.
+              <b>Labels.</b> A residue is an epitope if any atom lies within 4.5 Å of a bound antibody,
+              pooled across every antibody complex solved for that antigen.
             </li>
             <li>
-              <b>Hold out whole branches.</b> Training saw group 1 only, so the numbers below
-              come from subtypes on a different branch of the tree.
+              <b>Evaluation.</b> Training uses phylogenetic group 1 only. Performance is reported on
+              held-out subtypes, so near-duplicate structures cannot inflate the results.
             </li>
           </ol>
         </div>
 
         <div>
-          <h3>How well it does</h3>
+          <h3>Performance</h3>
           <table className="explain-table">
             <thead>
               <tr>
-                <th scope="col">Evaluated on</th>
+                <th scope="col">Evaluation set</th>
                 <th scope="col">AUPRC</th>
-                <th scope="col">vs exposure</th>
+                <th scope="col">Exposure baseline</th>
               </tr>
             </thead>
             <tbody>
@@ -149,41 +151,44 @@ export function Mechanism({ metrics }: Props) {
                 </tr>
               ))}
               <tr className="muted">
-                <th scope="row">Random guessing</th>
+                <th scope="row">Random (base rate)</th>
                 <td>~0.05</td>
                 <td>—</td>
               </tr>
             </tbody>
           </table>
           <p className="explain-foot">
-            Epitopes are ~5% of residues, so <b>0.05 is the floor, not zero</b>. On the held-out
-            branch the model runs about <b>7×</b> that floor and <b>3×</b> surface exposure alone.
+            Epitope residues are ~5% of all residues, so the random baseline for AUPRC is <b>~0.05, not 0</b>.
+            On the held-out clade the model achieves about <b>7×</b> the random baseline and <b>3×</b> the
+            surface-exposure baseline.
           </p>
         </div>
       </div>
 
       <div>
-        <h3>What this does not tell you</h3>
+        <h3>Limitations</h3>
         <ul className="caveats">
           <li>
-            <b>These are likely antibody targets, not a vaccine.</b> A patch antibodies can reach
-            is not automatically one the immune system responds to — the stem is conserved
-            <em> and</em> poorly immunogenic, which is why a universal flu vaccine is still unsolved.
+            <b>Predictions are candidates, not validated targets.</b> Accessibility to an antibody does not
+            establish that the immune response targets a site. The stalk is conserved yet poorly
+            immunogenic, which is why a universal influenza vaccine remains unsolved.
           </li>
           <li>
-            <b>Labels follow research attention, not immunity.</b> Stem complexes are
-            over-represented in the PDB because they have been the field's focus since 2009, so
-            head-versus-stem comparisons are confounded. Site-level comparisons are not — they
-            compare regions within the same chains.
+            <b>Labels reflect what has been crystallized.</b> Structural databases over-represent
+            well-studied complexes, such as stem-directed antibodies since 2009, so head-versus-stem
+            comparisons are confounded. Site-level comparisons within the same chains are not.
           </li>
           <li>
-            <b>Influenza B sits near the baseline.</b> At 23–27% identity the language-model
-            features stop transferring. That limit is measured, not assumed.
+            <b>Influenza B performance is near baseline.</b> At 23–27% identity to the training set,
+            language-model features do not transfer. This limit is measured, not assumed.
           </li>
           <li>
-            <b>Constraint is relative, not absolute.</b> It is entropy over circulating strains
-            normalised within a subtype, and influenza B is deliberately unscored rather than
-            borrowed from H3.
+            <b>Constraint is relative.</b> It is Shannon entropy across circulating strains, normalized
+            within a subtype. Influenza B is left unscored rather than borrowing values from H3.
+          </li>
+          <li>
+            <b>Research prototype.</b> Intended for prioritizing candidates for experimental follow-up,
+            not for clinical decision-making.
           </li>
         </ul>
       </div>

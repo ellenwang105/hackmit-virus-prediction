@@ -1,13 +1,22 @@
-/* Dark only. The app does not follow the OS setting, so it looks the same everywhere. */
+/* Dark only. The app does not follow the OS setting, so it looks the same everywhere.
+   Cool blue-black grounds and a teal accent, set in Instrument Serif (the one
+   display moment), IBM Plex Sans (reading) and IBM Plex Mono (every label, number
+   and identifier). The score ramp in color.ts is deliberately not part of this
+   palette: it encodes probability and is tuned for that, not for looks. */
 :root {
   color-scheme: dark;
-  --bg: #12161d;
-  --surface: #1a202a;
-  --surface-2: #232b37;
-  --border: #2d3644;
-  --text: #e6eaf0;
-  --muted: #98a2b3;
-  --accent: #7ba0ff;
+  --bg: #0b1117;
+  --surface: #141d26;
+  --surface-2: #1b2733;
+  --sunken: #0f171f;
+  --stage: #080d12;
+  --border: #22303c;
+  --border-strong: #334452;
+  --text: #e7eef4;
+  --muted: #94a6b6;
+  --faint: #6b7f91;
+  --accent: #3bb3c9;
+  --accent-soft: #0e2a32;
   --truth: #2dd4bf;
   --select: #a78bfa;
   --glycan: #b7a3d3;
@@ -15,28 +24,40 @@
   --ghost: #6b7686;
   --good: #5fd39a;
   --good-bg: #16302381;
-  --warn: #f2b85b;
-  --warn-bg: #3a2c10;
-  --grid: #2a3340;
+  --warn: #ff9a62;
+  --warn-bg: #2b1a10;
+  --grid: #1d2a35;
   --radius: 10px;
-  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px -16px rgba(0, 0, 0, 0.7);
+  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-sans);
   color: var(--text);
   font-size: 14px;
-  line-height: 1.45;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); }
 h1, h2 { margin: 0; line-height: 1.2; }
-h1 { font-size: 20px; }
-h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 8px; }
-code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+h1 { font-family: var(--font-display); font-weight: 400; font-size: 26px; }
+/* panel titles are labels, not headlines: small, mono, spaced */
+h2 { font-family: var(--font-mono); font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: var(--faint); margin-bottom: 10px; }
+code { font-family: var(--font-mono); background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 .muted { color: var(--muted); }
 
 .app { max-width: 1680px; margin: 0 auto; padding: 16px; }
-.header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
-.header p { margin: 2px 0 0; }
-.key { display: flex; gap: 14px; color: var(--muted); font-size: 12px; }
+.masthead {
+  display: flex; justify-content: space-between; align-items: flex-end; gap: 12px 32px; flex-wrap: wrap;
+  padding: 18px 0 20px; margin-bottom: 16px; border-bottom: 1px solid var(--border);
+}
+.eyebrow { margin: 0 0 8px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+.masthead h1 { font-size: clamp(32px, 4.6vw, 54px); line-height: 1.02; letter-spacing: -0.015em; text-wrap: balance; }
+.masthead h1 em { font-style: italic; color: var(--accent); }
+.standfirst { margin: 10px 0 0; max-width: 68ch; font-size: 15px; color: var(--muted); text-wrap: pretty; }
+.key { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--muted); font-family: var(--font-mono); font-size: 11px; }
 .key-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; }
 
 .layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 14px; align-items: start; }
@@ -60,16 +81,16 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 .dot.held { background: var(--good); }
 
 /* trust bar */
-.trust { border: 1px solid var(--border); border-left-width: 4px; border-radius: var(--radius); background: var(--surface); padding: 10px 14px; display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
-.trust.good { border-left-color: var(--good); }
-.trust.warn { border-left-color: var(--warn); }
+.trust { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 12px 16px; display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+.trust.good { border-color: color-mix(in srgb, var(--good) 45%, var(--border)); }
+.trust.warn { border-color: color-mix(in srgb, var(--warn) 50%, var(--border)); }
 .trust-head { display: flex; gap: 10px; align-items: baseline; flex: 1 1 360px; }
-.badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); white-space: nowrap; }
-.trust.good .badge { background: var(--good-bg); color: var(--good); }
-.trust.warn .badge { background: var(--warn-bg); color: var(--warn); }
+.badge { font-family: var(--font-mono); font-size: 10px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 8px; border-radius: 4px; border: 1px solid currentColor; color: var(--accent); white-space: nowrap; align-self: center; }
+.trust.good .badge { color: var(--good); }
+.trust.warn .badge { color: var(--warn); }
 .trust-stats { display: flex; gap: 22px; }
 .trust-stats > div { display: flex; flex-direction: column; max-width: 240px; }
-.stat-value { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.stat-value { font-family: var(--font-mono); font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .stat-label { font-size: 12px; color: var(--muted); }
 
 /* viewer + side panel */
@@ -167,7 +188,8 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 .phylo-all:hover { color: var(--text); }
 .phylo-all.active { background: var(--accent); border-color: var(--accent); color: var(--surface); }
 
-.phylo-svg { width: 100%; height: auto; display: block; }
+/* capped so the single-column layout does not scale the tree, and its text, up with the sidebar */
+.phylo-svg { width: 100%; max-width: 260px; height: auto; display: block; }
 .phylo-branch { stroke: var(--border); stroke-width: 1.3; fill: none; }
 .phylo-dot { fill: var(--border); }
 .phylo-row { fill: var(--surface-2); opacity: 0; }
@@ -245,3 +267,79 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
   .main.is-switching .residue-card,
   .main.is-switching .track { transition: none; }
 }
+
+/* ---------- upload ---------- */
+
+.upload { margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.upload h2 { margin-bottom: 8px; }
+.dropzone {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; width: 100%;
+  padding: 14px 10px; font: inherit; text-align: center; cursor: pointer;
+  color: var(--muted); background: var(--surface-2);
+  border: 1.5px dashed var(--border); border-radius: var(--radius);
+  transition: border-color 120ms, background 120ms, color 120ms;
+}
+.dropzone strong { color: var(--text); font-weight: 600; font-size: 13px; }
+.dropzone span { font-size: 11.5px; }
+.dropzone:hover:not(:disabled), .dropzone.over { border-color: var(--accent); color: var(--text); }
+.dropzone.over { background: color-mix(in srgb, var(--accent) 12%, var(--surface-2)); }
+.dropzone:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dropzone:disabled { opacity: .55; cursor: progress; }
+.upload-id { display: flex; gap: 6px; margin-top: 8px; }
+.upload-id .input { flex: 1; min-width: 0; }
+/* only what is typed is uppercased, so the placeholder stays readable */
+.upload-id .input:not(:placeholder-shown) { text-transform: uppercase; }
+.upload-busy, .upload-error { margin: 8px 0 0; font-size: 12px; line-height: 1.45; }
+.upload-busy { color: var(--muted); }
+.upload-error { color: var(--warn); }
+.upload-result { margin-top: 10px; padding: 10px; background: var(--surface-2); border-radius: var(--radius); }
+.upload-result-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.upload-chains { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.chip {
+  font: inherit; font-size: 11.5px; line-height: 1; padding: 5px 9px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--muted);
+}
+.chip:hover { color: var(--text); }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.upload-note { margin: 8px 0 0; font-size: 11.5px; }
+.trust-notes { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: var(--muted); display: grid; gap: 3px; }
+
+/* ---------- design pass: surfaces and labels ---------- */
+
+/* Lift the two things that need it, the structure and the panel beside it, and
+   leave everything else flat so the hierarchy reads. */
+.viewer, .panel { box-shadow: var(--shadow); }
+.viewer { background: var(--stage); }
+.input { background: var(--sunken); }
+.input::placeholder { color: var(--faint); }
+.input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dropzone, .upload-result { background: var(--sunken); }
+
+/* Everything that is a label, a number or an identifier is mono; prose stays sans. */
+.count, .antigen-id, .antigen-score, .antigen .muted, .residue-name, .score-chip, .tag, .bar-value,
+.legend-title, .legend-ticks, .track-legend, .track-caption, .phylo-name, .phylo-count,
+.check, .ghost-button, .phylo-all, .chip, .table th,
+.axis-label, .strip-letter, .fig-label, .fig-small { font-family: var(--font-mono); }
+.count, .antigen-score, .antigen .muted { font-size: 11px; }
+.tag { font-size: 10.5px; }
+.phylo-name { font-size: 11px; }
+.check, .ghost-button, .phylo-all, .chip { font-size: 11px; letter-spacing: 0.03em; }
+.check, .ghost-button { border-color: var(--border-strong); }
+.table th { font-size: 10px; letter-spacing: 0.1em; }
+.tab { font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; }
+.tab:hover:not(.active) { color: var(--text); }
+.explain-table td { font-family: var(--font-mono); font-size: 13px; }
+.explain-table thead th { font-family: var(--font-mono); }
+
+/* section headings: the serif is the one display moment, used sparingly */
+.explain h3 { font-family: var(--font-display); font-weight: 400; font-size: 24px; line-height: 1.15; letter-spacing: -0.005em; margin: 0 0 10px; }
+
+.page-foot {
+  display: flex; flex-wrap: wrap; gap: 8px 24px; margin-top: 28px; padding: 20px 0 36px;
+  border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; color: var(--faint);
+}
+
+/* a checkbox whose layer is absent from this structure */
+.check.unavailable { opacity: 0.4; cursor: not-allowed; }
+.check.unavailable input { cursor: not-allowed; }

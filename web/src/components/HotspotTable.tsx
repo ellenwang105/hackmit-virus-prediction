@@ -7,6 +7,8 @@ interface Props {
   selected: number[];
   onPick: (indices: number[]) => void;
   onClear: () => void;
+  /** false for an upload, which has no antibody to have been observed touching anything */
+  showObserved?: boolean;
 }
 
 const sameSet = (a: number[], b: number[]) => a.length === b.length && a.every((v, i) => v === b[i]);
@@ -18,7 +20,7 @@ function csv(patches: Patch[]) {
   return ["rank,residues,mean_score,peak_score,ha_numbers,annotation,observed_fraction", ...rows].join("\n");
 }
 
-export function HotspotTable({ patches, loading, selected, onPick, onClear }: Props) {
+export function HotspotTable({ patches, loading, selected, onPick, onClear, showObserved = true }: Props) {
   const download = () => {
     const url = URL.createObjectURL(new Blob([csv(patches)], { type: "text/csv" }));
     const link = Object.assign(document.createElement("a"), { href: url, download: "hotspots.csv" });
@@ -29,18 +31,18 @@ export function HotspotTable({ patches, loading, selected, onPick, onClear }: Pr
   return (
     <div className="panel-body">
       <p className="panel-note">
-        High-scoring residues that sit together on the surface, ranked by total score. Click a patch to select and zoom to it.
+        Spatially clustered high-scoring residues (Cα within 9 Å), ranked by summed score. Select a patch to focus it in the structure.
       </p>
-      {loading && <p className="muted">Waiting for the structure…</p>}
-      {!loading && patches.length === 0 && <p className="muted">No compact high-scoring patch found on this chain.</p>}
+      {loading && <p className="muted">Loading structure…</p>}
+      {!loading && patches.length === 0 && <p className="muted">No compact high-scoring patch on this chain.</p>}
       {patches.length > 0 && (
         <table className="table">
           <thead>
             <tr>
               <th>#</th>
-              <th>Residues (HA numbering)</th>
-              <th title="Mean predicted probability">Mean</th>
-              <th title="Fraction of the patch that antibodies were actually seen touching">Seen</th>
+              <th>Residues (H3 numbering)</th>
+              <th title="Mean predicted probability">Mean score</th>
+              {showObserved && <th title="Fraction of patch residues with an observed antibody contact">Observed</th>}
             </tr>
           </thead>
           <tbody>
@@ -69,7 +71,7 @@ export function HotspotTable({ patches, loading, selected, onPick, onClear }: Pr
                     {p.meanScore.toFixed(2)}
                   </span>
                 </td>
-                <td>{Math.round(p.observed * 100)}%</td>
+                {showObserved && <td>{Math.round(p.observed * 100)}%</td>}
               </tr>
             ))}
           </tbody>
@@ -80,7 +82,7 @@ export function HotspotTable({ patches, loading, selected, onPick, onClear }: Pr
           Clear selection{selected.length ? ` (${selected.length})` : ""}
         </button>
         <button className="ghost-button" onClick={download} disabled={patches.length === 0}>
-          Download CSV
+          Export CSV
         </button>
       </div>
     </div>
