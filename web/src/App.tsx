@@ -13,6 +13,7 @@ import { TrustBar } from "./components/TrustBar";
 import { Mechanism } from "./components/Mechanism";
 import { UploadPanel } from "./components/UploadPanel";
 import { UPLOAD_ENABLED } from "./api";
+import logo from "./assets/apo-logo.png";
 import { SequenceSearch } from "./components/SequenceSearch";
 import type { SearchResult, SequenceHit } from "./search";
 
@@ -193,7 +194,7 @@ export function App() {
   return (
     <div className="app">
       <header className="masthead">
-        <div>
+        <div className="masthead-text">
           <p className="eyebrow">Influenza hemagglutinin · Preclinical target selection</p>
           <h1>
             Epitope prioritization for <em>durable</em> antibody targets
@@ -204,6 +205,7 @@ export function App() {
             held-out influenza subtypes.
           </p>
         </div>
+        <img className="brand-logo" src={logo} alt="apo" width={148} height={148} decoding="async" />
         <div className="header-right">
           <button className="primary-button" onClick={() => setSearchOpen(true)} disabled={!index}>
             Find by sequence

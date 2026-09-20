@@ -58,6 +58,22 @@ const GLYCAN_RESN = ["NAG", "NDG", "BMA", "MAN", "FUC", "GAL", "SIA", "GLC", "XY
  * apo HA, say) has no antibody to show, and 31 of the 216 structures model no glycans.
  */
 type Available = Record<keyof ViewerOptions, boolean>;
+
+/**
+ * What most people want to switch is the prediction, the surface and the antibody.
+ * The rest (observed contacts, trimer partners, sugars) are context, and six boxes
+ * at once made the toolbar something to decode rather than something to use.
+ */
+const PRIMARY_LAYERS = [
+  ["showSites", "Predicted epitope"],
+  ["showSurface", "Surface"],
+  ["showAntibodies", "Bound antibody"],
+] as const;
+const MORE_LAYERS = [
+  ["showTruth", "Observed contacts"],
+  ["showOtherCopies", "Other protomers"],
+  ["showGlycans", "Glycans"],
+] as const;
 const ALL_AVAILABLE: Available = {
   showSites: true, showTruth: true, showSurface: true, showAntibodies: true, showOtherCopies: true, showGlycans: true,
 };
@@ -351,6 +367,7 @@ export function StructureViewer(props: Props) {
   handlers.current = props;
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [available, setAvailable] = useState<Available>(ALL_AVAILABLE);
+  const [showMore, setShowMore] = useState(false);
   const [message, setMessage] = useState("");
 
   // one WebGL viewer for the life of the component
@@ -486,32 +503,28 @@ export function StructureViewer(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus?.nonce]);
 
+  const renderLayer = ([key, label]: readonly [keyof ViewerOptions, string]) => {
+    const usable = available[key];
+    return (
+      <label key={key} className={usable ? "check" : "check unavailable"} title={usable ? undefined : UNAVAILABLE_REASON[key]}>
+        <input type="checkbox" checked={options[key] && usable} disabled={!usable} onChange={() => toggle(key)} />
+        {label}
+      </label>
+    );
+  };
+
   const toggle = (key: keyof ViewerOptions) => props.onOptions({ ...options, [key]: !options[key] });
 
   return (
     <div className="viewer">
       <div ref={container} className="viewer-canvas" />
       <div className="viewer-toolbar">
-        {(
-          [
-            ["showSites", "Predicted epitope"],
-            ["showTruth", "Observed contacts"],
-            ["showSurface", "Surface"],
-            ["showAntibodies", "Bound antibody"],
-            ["showOtherCopies", "Other protomers"],
-            ["showGlycans", "Glycans"],
-          ] as const
-        )
-          .filter(([key]) => key !== "showTruth" || !isUpload(antigen))
-          .map(([key, label]) => {
-            const usable = available[key];
-            return (
-              <label key={key} className={usable ? "check" : "check unavailable"} title={usable ? undefined : UNAVAILABLE_REASON[key]}>
-                <input type="checkbox" checked={options[key] && usable} disabled={!usable} onChange={() => toggle(key)} />
-                {label}
-              </label>
-            );
-          })}
+        {PRIMARY_LAYERS.map(renderLayer)}
+        <button className="ghost-button" aria-expanded={showMore} onClick={() => setShowMore((open) => !open)}>
+          {showMore ? "Fewer layers" : "More layers"}
+        </button>
+        {showMore &&
+          MORE_LAYERS.filter(([key]) => key !== "showTruth" || !isUpload(antigen)).map(renderLayer)}
         <button
           className="ghost-button"
           onClick={() => viewerRef.current?.zoomTo({ chain: antigen.chain, hetflag: false }, 500)}

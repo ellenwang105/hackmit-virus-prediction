@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import type { AntigenSummary, Phylogeny } from "../types";
-import { SPLIT_LABEL, isHeldOut } from "../data";
+import { isHeldOut } from "../data";
 import { PhyloTree } from "./PhyloTree";
 
 interface Props {
@@ -46,7 +46,6 @@ function representativeOf(index: AntigenSummary[], subtype: string): AntigenSumm
 export function AntigenPicker({ index, phylogeny, selectedId, onSelect, top, highlightSubtype }: Props) {
   const [query, setQuery] = useState("");
   const [subtype, setSubtype] = useState("all");
-  const [split, setSplit] = useState("all");
 
   // the tree covers the subtypes with a coherent reference sequence; the rest
   // (unknown, chimeric constructs) stay reachable from this list
@@ -58,13 +57,27 @@ export function AntigenPicker({ index, phylogeny, selectedId, onSelect, top, hig
     [index, phylogeny],
   );
 
+  // One row per solved structure. The same protein is often solved as several chains,
+  // and a list of 684 chain letters means nothing to someone browsing; chains appear
+  // under the structure that is open.
+  const structures = useMemo(() => {
+    const byPdb = new Map<string, AntigenSummary[]>();
+    for (const a of index) byPdb.set(a.pdb, [...(byPdb.get(a.pdb) ?? []), a]);
+    return [...byPdb.values()].map((chains) => {
+      const lead = chains.reduce((best, c) => (c.nEpitope > best.nEpitope ? c : best));
+      return { pdb: lead.pdb, subtype: lead.subtype, year: lead.year, split: lead.split, lead, chains };
+    });
+  }, [index]);
+
+  const selectedPdb = index.find((a) => a.id === selectedId)?.pdb ?? null;
+
+  // held-out structures first: they are the ones whose scores are not flattered by training
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return index
-      .filter((a) => (subtype === "all" || a.subtype === subtype) && (split === "all" || a.split === split))
-      .filter((a) => !q || a.id.toLowerCase().includes(q))
-      .sort((a, b) => SPLIT_ORDER.indexOf(a.split) - SPLIT_ORDER.indexOf(b.split) || a.id.localeCompare(b.id));
-  }, [index, query, subtype, split]);
+    return structures
+      .filter((s) => (subtype === "all" || s.subtype === subtype) && (!q || s.pdb.toLowerCase().includes(q)))
+      .sort((a, b) => SPLIT_ORDER.indexOf(a.split) - SPLIT_ORDER.indexOf(b.split) || a.pdb.localeCompare(b.pdb));
+  }, [structures, query, subtype]);
 
   return (
     <aside className="picker">
@@ -85,47 +98,54 @@ export function AntigenPicker({ index, phylogeny, selectedId, onSelect, top, hig
         />
       )}
 
-      <h2>Antigen</h2>
+      <h2>Structures</h2>
       <input
         className="input"
         type="search"
-        placeholder="Search PDB ID (e.g., 3SDY)"
+        placeholder="Search by PDB ID"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        aria-label="Search antigens"
+        aria-label="Search structures by PDB ID"
       />
-      <div className="filters">
-        {strays.length > 0 && (
-          <select className="input" value={subtype} onChange={(e) => setSubtype(e.target.value)} aria-label="Other subtypes">
-            <option value="all">Other</option>
+      {strays.length > 0 && (
+        <div className="filters">
+          <select className="input" value={subtype} onChange={(e) => setSubtype(e.target.value)} aria-label="Other virus types">
+            <option value="all">Other virus types</option>
             {strays.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
             ))}
           </select>
-        )}
-        <select className="input" value={split} onChange={(e) => setSplit(e.target.value)} aria-label="Data split">
-          <option value="all">All splits</option>
-          {SPLIT_ORDER.map((s) => (
-            <option key={s} value={s}>
-              {SPLIT_LABEL[s]}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="count muted">{shown.length} of {index.length} chains</div>
+        </div>
+      )}
+      <div className="count muted">{shown.length} structures</div>
       <ul className="antigen-list">
-        {shown.map((a) => (
-          <li key={a.id}>
-            <button className={a.id === selectedId ? "antigen active" : "antigen"} onClick={() => onSelect(a.id)}>
-              <span className={`dot ${isHeldOut(a.split) ? "held" : ""}`} title={SPLIT_LABEL[a.split]} />
-              <span className="antigen-id">{a.pdb} · {a.chain}</span>
-              <span className="muted">{a.subtype} · {a.year}</span>
-              <span className="antigen-score">{a.auprc === null ? "" : a.auprc.toFixed(2)}</span>
-            </button>
-          </li>
-        ))}
+        {shown.map((s) => {
+          const active = s.pdb === selectedPdb;
+          return (
+            <li key={s.pdb}>
+              <button
+                className={active ? "antigen active" : "antigen"}
+                aria-current={active}
+                onClick={() => !active && onSelect(s.lead.id)}
+              >
+                <span className="antigen-id">{s.pdb.toUpperCase()}</span>
+                <span className="muted">{s.subtype} · {s.year}</span>
+              </button>
+              {active && s.chains.length > 1 && (
+                <div className="antigen-chains" role="group" aria-label="Chains in this structure">
+                  <span className="muted">Chain</span>
+                  {s.chains.map((c) => (
+                    <button key={c.id} className="chip" aria-pressed={c.id === selectedId} onClick={() => onSelect(c.id)}>
+                      {c.chain}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </aside>
   );
